@@ -25,6 +25,18 @@ function ignoreCss() {
   };
 }
 
+function replaceBrowserEnv() {
+  return {
+    name: "replace-browser-env",
+    renderChunk(code) {
+      return {
+        code: code.replaceAll("process.env.NODE_ENV", '"production"'),
+        map: null,
+      };
+    },
+  };
+}
+
 await rm(distDir, { recursive: true, force: true });
 await mkdir(assetsDir, { recursive: true });
 
@@ -43,6 +55,7 @@ const bundle = await rollup({
       plugins: [["@babel/plugin-transform-react-jsx", { runtime: "automatic" }]],
       exclude: "node_modules/**",
     }),
+    replaceBrowserEnv(),
   ],
 });
 

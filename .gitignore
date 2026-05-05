@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.npm-cache/
+.vercel/
+.vercel-home/
+.vercel-local/
+.chrome-profile/
+.edge-profile/
+codexgit/
+.codex-git/
+fix-git-permissions.ps1
+server.log
+server.err.log
+vercel-login.log
+vercel-login.err.log
+vercel-deploy.log
+vercel-deploy.err.log

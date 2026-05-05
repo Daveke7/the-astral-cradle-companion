@@ -1,0 +1,27 @@
+{
+  "name": "the-astral-cradle-companion",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --configLoader runner",
+    "build": "node scripts/build.mjs",
+    "lint": "eslint .",
+    "preview": "node scripts/serve-dist.mjs"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "^5.0.4",
+    "lucide-react": "^0.468.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "vite": "^7.1.11"
+  },
+  "devDependencies": {
+    "@babel/plugin-transform-react-jsx": "^7.28.6",
+    "@rollup/plugin-babel": "^7.0.0",
+    "@rollup/plugin-commonjs": "^29.0.2",
+    "@rollup/plugin-node-resolve": "^16.0.3",
+    "eslint": "^9.36.0",
+    "globals": "^16.4.0"
+  }
+}

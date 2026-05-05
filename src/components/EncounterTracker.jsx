@@ -1,11 +1,19 @@
 import { CircleMinus, CirclePlus, Forward } from "lucide-react";
-import { encounters } from "../data/campaignData.js";
 import { Meter, Panel, Tag } from "./ui.jsx";
 
-export function EncounterTracker({ monsters, setMonsters, activeTurn, setActiveTurn }) {
-  const encounter = encounters[0];
+const conditionReference = {
+  Blinded: "Kan niet zien; attacks tegen target hebben advantage, eigen attacks disadvantage.",
+  Charmed: "Kan charmer niet aanvallen; charmer heeft advantage op social checks.",
+  Frightened: "Disadvantage zolang bron zichtbaar is; kan niet dichterbij bewegen.",
+  Grappled: "Speed 0; eindigt als grappler incapacitated is of effect breekt.",
+  Poisoned: "Disadvantage op attack rolls en ability checks.",
+  Prone: "Melee tegen target advantage, ranged disadvantage; staan kost halve speed.",
+  Stunned: "Incapacitated, faalt STR/DEX saves, attacks tegen target advantage.",
+};
+
+export function EncounterTracker({ encounterState, encounter, monsters, setMonsters, activeTurn, setActiveTurn, patchEncounter }) {
   const ordered = [...monsters].sort((a, b) => b.initiative - a.initiative);
-  const active = ordered[activeTurn % ordered.length];
+  const active = ordered.length ? ordered[activeTurn % ordered.length] : null;
 
   function adjustHp(name, amount) {
     setMonsters((current) =>
@@ -17,13 +25,25 @@ export function EncounterTracker({ monsters, setMonsters, activeTurn, setActiveT
     );
   }
 
+  function toggleCondition(name, condition) {
+    setMonsters((current) =>
+      current.map((monster) => {
+        if (monster.name !== name) return monster;
+        const currentConditions = new Set(monster.conditions);
+        if (currentConditions.has(condition)) currentConditions.delete(condition);
+        else currentConditions.add(condition);
+        return { ...monster, conditions: Array.from(currentConditions) };
+      })
+    );
+  }
+
   return (
     <main className="workspace two-column">
       <header className="topbar">
         <div>
           <p className="label">Encounter Tracker</p>
           <h1>{encounter.name}</h1>
-          <span>{encounter.difficulty} - {encounter.objective}</span>
+          <span>Ronde {encounterState.round} - {encounter.difficulty} - {encounter.objective}</span>
         </div>
         <button className="button button--primary" type="button" onClick={() => setActiveTurn((turn) => turn + 1)}>
           <Forward size={18} /> Volgende beurt
@@ -34,7 +54,7 @@ export function EncounterTracker({ monsters, setMonsters, activeTurn, setActiveT
         <Panel title="Initiative">
           <div className="combat-list">
             {ordered.map((monster) => (
-              <article className={active.name === monster.name ? "combatant combatant--active" : "combatant"} key={monster.name}>
+              <article className={active?.name === monster.name ? "combatant combatant--active" : "combatant"} key={monster.name}>
                 <div className="combatant__main">
                   <strong>{monster.name}</strong>
                   <span>Init {monster.initiative} - AC {monster.ac}</span>
@@ -53,6 +73,19 @@ export function EncounterTracker({ monsters, setMonsters, activeTurn, setActiveT
                     <button type="button" onClick={() => adjustHp(monster.name, 5)} title="5 healing"><CirclePlus size={16} /></button>
                   </div>
                 </div>
+                <div className="condition-toggle-row">
+                  {Object.keys(conditionReference).slice(0, 5).map((condition) => (
+                    <button
+                      className={monster.conditions.includes(condition) ? "mini-toggle mini-toggle--active" : "mini-toggle"}
+                      key={condition}
+                      type="button"
+                      title={conditionReference[condition]}
+                      onClick={() => toggleCondition(monster.name, condition)}
+                    >
+                      {condition}
+                    </button>
+                  ))}
+                </div>
               </article>
             ))}
           </div>
@@ -65,12 +98,27 @@ export function EncounterTracker({ monsters, setMonsters, activeTurn, setActiveT
           <div className="dm-note-block">
             <strong>Timer</strong>
             <span>{encounter.timer}</span>
+            <Meter value={encounterState.timerProgress} tone={encounterState.timerProgress > 65 ? "danger" : "accent"} />
+            <div className="hp-actions">
+              <button type="button" onClick={() => patchEncounter({ timerProgress: Math.max(0, encounterState.timerProgress - 25) })}>-</button>
+              <button type="button" onClick={() => patchEncounter({ timerProgress: Math.min(100, encounterState.timerProgress + 25) })}>+</button>
+            </div>
+          </div>
+          <div className="dm-note-block">
+            <strong>Objective status</strong>
+            <select value={encounterState.objectiveStatus} onChange={(event) => patchEncounter({ objectiveStatus: event.target.value })}>
+              <option>Nog open</option>
+              <option>Route-info gevonden</option>
+              <option>Scout gevangen</option>
+              <option>Escalatie gestart</option>
+              <option>Afgerond</option>
+            </select>
           </div>
         </Panel>
         <Panel title="Conditions reminder">
           <div className="condition-grid">
-            {["Blinded", "Charmed", "Frightened", "Grappled", "Poisoned", "Prone", "Stunned"].map((condition) => (
-              <button key={condition} type="button" title={`${condition}: check PHB/SRD korte regel aan tafel`}>
+            {Object.entries(conditionReference).map(([condition, detail]) => (
+              <button key={condition} type="button" title={detail}>
                 {condition}
               </button>
             ))}

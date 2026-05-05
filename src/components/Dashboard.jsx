@@ -2,7 +2,7 @@ import { ArrowRight, BookOpenCheck, Eye, FlaskConical, ScrollText, Swords, Users
 import { campaign, npcs, quests, scenes } from "../data/campaignData.js";
 import { Meter, Panel, Tag } from "./ui.jsx";
 
-export function Dashboard({ onNavigate, completedScenes, publishedCount }) {
+export function Dashboard({ onNavigate, completedScenes, publishedCount, prepQuality }) {
   const activeQuests = quests.filter((quest) => quest.status === "Active");
   const importantNpcs = npcs.filter((npc) => ["Ally", "Hostile", "Missing"].includes(npc.status)).slice(0, 4);
 
@@ -36,8 +36,9 @@ export function Dashboard({ onNavigate, completedScenes, publishedCount }) {
           </div>
           <div>
             <span className="label">Prep status</span>
-            <strong>{campaign.nextSession.prepStatus}%</strong>
-            <Meter value={campaign.nextSession.prepStatus} />
+            <strong>{prepQuality?.score ?? campaign.nextSession.prepStatus}%</strong>
+            <Meter value={prepQuality?.score ?? campaign.nextSession.prepStatus} tone={prepQuality?.score < 65 ? "danger" : "accent"} />
+            {prepQuality?.warnings?.length ? <small>{prepQuality.warnings.length} format aandachtspunten</small> : null}
           </div>
         </div>
       </Panel>

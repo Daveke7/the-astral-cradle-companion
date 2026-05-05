@@ -4,8 +4,13 @@ import {
   ClipboardList,
   Eye,
   Map,
+  Network,
+  Share2,
+  Shield,
+  ListOrdered,
   Swords,
   Theater,
+  UploadCloud,
   Users,
 } from "lucide-react";
 import { campaign } from "../data/campaignData.js";
@@ -13,8 +18,13 @@ import { campaign } from "../data/campaignData.js";
 const iconMap = {
   dashboard: Castle,
   campaign: Map,
+  party: Shield,
+  import: UploadCloud,
+  memory: Share2,
+  os: Network,
   prep: ClipboardList,
   runtime: Eye,
+  initiative: ListOrdered,
   encounter: Swords,
   npcs: Theater,
   quests: BookOpen,

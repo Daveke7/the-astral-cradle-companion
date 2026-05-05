@@ -1,7 +1,10 @@
 import { arcs, campaign } from "../data/campaignData.js";
 import { DmOnly, Panel, Tag } from "./ui.jsx";
 
-export function CampaignHub() {
+export function CampaignHub({ workspace }) {
+  const publishedCount = workspace?.playerView?.publishedCards?.length || 0;
+  const completedCount = workspace?.runtime?.completedSceneIds?.length || 0;
+
   return (
     <main className="workspace two-column">
       <header className="topbar">
@@ -41,6 +44,14 @@ export function CampaignHub() {
       </section>
 
       <aside className="side-column">
+        <Panel title="Workspace status">
+          <div className="os-metrics os-metrics--stacked">
+            <div><strong>{completedCount}</strong><span>runtime scenes afgerond</span></div>
+            <div><strong>{publishedCount}</strong><span>player-safe updates</span></div>
+            <div><strong>{workspace?.prep?.importText?.length || 0}</strong><span>AI prep tekens</span></div>
+          </div>
+        </Panel>
+
         <Panel title="Continuity warnings">
           <div className="warning-stack">
             {campaign.warnings.map((warning) => (

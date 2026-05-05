@@ -1,6 +1,8 @@
 node_modules/
 dist/
 .npm-cache/
+.tmp-packages/
+*.tgz
 .vercel/
 .vercel-home/
 .vercel-local/

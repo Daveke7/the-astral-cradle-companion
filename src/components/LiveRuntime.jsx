@@ -1,18 +1,44 @@
-import { Check, Megaphone, RotateCcw } from "lucide-react";
-import { scenes, tools } from "../data/campaignData.js";
+import { Check, Megaphone, RotateCcw, WandSparkles } from "lucide-react";
+import { tools } from "../data/campaignData.js";
 import { DmOnly, EmptyState, Panel, Tag } from "./ui.jsx";
 
+const fallbackPanic = [
+  {
+    id: "jungle-cost",
+    title: "Jungle cost",
+    type: "Pacing",
+    text: "Laat succes iets kosten: tijd, supplies, lawaai, of Azaka's vertrouwen.",
+  },
+  {
+    id: "black-night",
+    title: "Zwarte hemel",
+    type: "Mood",
+    text: "Een reflectie toont sterren die er niet zijn. Niemand anders ziet het meteen.",
+  },
+];
+
+function clueKey(sceneId, clue) {
+  return `${sceneId}::${clue}`;
+}
+
 export function LiveRuntime({
+  scenes,
   activeSceneId,
   setActiveSceneId,
   completedScenes,
   toggleSceneComplete,
   publishedScenes,
   publishScene,
-  notes,
-  setNotes,
+  notesByScene,
+  setSceneNote,
+  clueStatuses,
+  setClueStatus,
+  panicLog,
+  onAddPanicPrompt,
 }) {
   const scene = scenes.find((item) => item.id === activeSceneId) ?? scenes[0];
+  const notes = notesByScene[scene.id] || "";
+  const panicOptions = panicLog.length ? panicLog : fallbackPanic;
 
   return (
     <main className="workspace runtime-layout">
@@ -54,9 +80,24 @@ export function LiveRuntime({
 
         <Panel title="Clues to reveal">
           <div className="clue-list">
-            {scene.clues.map((clue) => (
-              <button type="button" key={clue}>{clue}</button>
-            ))}
+            {scene.clues.length ? (
+              scene.clues.map((clue) => {
+                const state = clueStatuses[clueKey(scene.id, clue)]?.status || "hidden";
+                return (
+                  <button
+                    className={state === "revealed" ? "clue-button clue-button--revealed" : "clue-button"}
+                    type="button"
+                    key={clue}
+                    onClick={() => setClueStatus(scene.id, clue, state === "hidden" ? "found" : "revealed")}
+                  >
+                    <span>{clue}</span>
+                    <Tag tone={state === "revealed" ? "safe" : state === "found" ? "warning" : "neutral"}>{state}</Tag>
+                  </button>
+                );
+              })
+            ) : (
+              <EmptyState>Geen clues herkend voor deze scene.</EmptyState>
+            )}
           </div>
         </Panel>
 
@@ -64,7 +105,7 @@ export function LiveRuntime({
           <textarea
             className="notes-box"
             value={notes}
-            onChange={(event) => setNotes(event.target.value)}
+            onChange={(event) => setSceneNote(scene.id, event.target.value)}
             placeholder="Korte tafelnotities: keuzes, beloftes, nieuwe NPC namen, gevolgen."
           />
         </Panel>
@@ -90,6 +131,16 @@ export function LiveRuntime({
           ) : (
             <EmptyState>Nog niet naar Player View gestuurd.</EmptyState>
           )}
+        </Panel>
+        <Panel title="Panic knop">
+          <div className="tool-stack">
+            {panicOptions.slice(0, 2).map((prompt) => (
+              <button className="panic-chip" key={prompt.id || prompt.title} type="button" onClick={() => onAddPanicPrompt(prompt)}>
+                <WandSparkles size={16} />
+                <span>{prompt.text}</span>
+              </button>
+            ))}
+          </div>
         </Panel>
       </aside>
     </main>

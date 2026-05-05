@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --host 127.0.0.1 --configLoader runner",
+    "dev": "vite --host 127.0.0.1 --configLoader native",
     "build": "node scripts/build.mjs",
     "lint": "eslint .",
     "preview": "node scripts/serve-dist.mjs"

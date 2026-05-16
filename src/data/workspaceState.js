@@ -1,4 +1,6 @@
 import { campaign, encounters, scenes } from "./campaignData.js";
+import { createDefaultChultMapState, normalizeChultMapState } from "./systems/chultHexSystem.js";
+import { defaultTravelOverlays, defaultTravelRoles } from "./systems/travelSystem.js";
 
 export const WORKSPACE_VERSION = 1;
 
@@ -40,7 +42,7 @@ function monsterWithDefaults(monster) {
 function initiativeParticipantWithDefaults(participant = {}) {
   return {
     id: participant.id || `turn-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-    name: participant.name || "Nieuwe deelnemer",
+    name: Object.prototype.hasOwnProperty.call(participant, "name") ? participant.name : "Nieuwe deelnemer",
     side: participant.side || "enemy",
     role: participant.role || "",
     initiative: Number(participant.initiative || 0),
@@ -56,6 +58,24 @@ function initiativeParticipantWithDefaults(participant = {}) {
     lairAction: Boolean(participant.lairAction),
     notes: participant.notes || "",
     hiddenFromPlayers: Boolean(participant.hiddenFromPlayers),
+    monsterIndex: participant.monsterIndex || "",
+    source: participant.source || "",
+    cr: participant.cr ?? "",
+    xp: Number(participant.xp || 0),
+    size: participant.size || "",
+    type: participant.type || "",
+    alignment: participant.alignment || "",
+    speed: participant.speed || "",
+    abilities: participant.abilities && typeof participant.abilities === "object" ? participant.abilities : {},
+    saves: participant.saves && typeof participant.saves === "object" ? participant.saves : {},
+    skills: participant.skills && typeof participant.skills === "object" ? participant.skills : {},
+    senses: participant.senses || "",
+    languages: participant.languages || "",
+    traits: Array.isArray(participant.traits) ? participant.traits : [],
+    actions: Array.isArray(participant.actions) ? participant.actions : [],
+    reactions: Array.isArray(participant.reactions) ? participant.reactions : [],
+    environment: Array.isArray(participant.environment) ? participant.environment : [],
+    tags: Array.isArray(participant.tags) ? participant.tags : [],
   };
 }
 
@@ -81,6 +101,8 @@ function createDefaultInitiative() {
     })
   );
 
+  const participants = [...partyTurns, ...monsterTurns];
+
   return {
     encounterName: encounters[0]?.name || "Nieuwe encounter",
     round: 1,
@@ -89,7 +111,8 @@ function createDefaultInitiative() {
     lairActionName: "Firefinger hazard op initiative 20",
     objective: encounters[0]?.objective || "",
     timer: encounters[0]?.timer || "",
-    participants: [...partyTurns, ...monsterTurns],
+    participants,
+    turnOrder: participants.map((participant) => participant.id),
     log: [],
   };
 }
@@ -99,18 +122,41 @@ function createDefaultPartyMembers() {
     name: member.name,
     classSummary: member.player,
     level: campaign.partyLevel,
+    proficiencyBonus: 2,
     race: member.player.split(" ")[0] || "",
+    background: "",
+    alignment: "",
     ac: "",
+    currentHp: "",
     maxHp: "",
+    tempHp: "",
     passivePerception: "",
     spellSaveDc: "",
+    spellAttackBonus: "",
+    spellcastingAbility: "",
+    speed: "",
+    senses: "",
+    initiative: "",
+    xp: "",
+    abilities: "",
+    saves: "",
+    skills: "",
+    proficiencies: "",
+    languages: "",
+    attacks: "",
+    spells: "",
+    cantrips: "",
+    preparedSpells: "",
     status: member.status,
     hook: member.hook,
     visible: member.visible,
     imageUrl: "",
     beyondUrl: "",
     beyondCharacterId: "",
+    beyondApiUrl: "",
+    campaignName: "",
     gear: "",
+    currency: "",
     notes: "",
     conditions: "",
     spotlight: member.hook,
@@ -126,6 +172,8 @@ function createDefaultImportCenter() {
     url: "",
     sourceText: "",
     review: null,
+    fetchError: "",
+    lastBeyondFetch: "",
     history: [],
   };
 }
@@ -135,18 +183,41 @@ function partyMemberWithDefaults(member = {}, fallback = {}) {
     name: member.name || fallback.name || "Onbekende PC",
     classSummary: member.classSummary || fallback.classSummary || fallback.player || "",
     level: member.level ?? fallback.level ?? campaign.partyLevel,
+    proficiencyBonus: member.proficiencyBonus ?? fallback.proficiencyBonus ?? "",
     race: member.race || fallback.race || "",
+    background: member.background || fallback.background || "",
+    alignment: member.alignment || fallback.alignment || "",
     ac: member.ac ?? fallback.ac ?? "",
+    currentHp: member.currentHp ?? fallback.currentHp ?? "",
     maxHp: member.maxHp ?? fallback.maxHp ?? "",
+    tempHp: member.tempHp ?? fallback.tempHp ?? "",
     passivePerception: member.passivePerception ?? fallback.passivePerception ?? "",
     spellSaveDc: member.spellSaveDc ?? fallback.spellSaveDc ?? "",
+    spellAttackBonus: member.spellAttackBonus ?? fallback.spellAttackBonus ?? "",
+    spellcastingAbility: member.spellcastingAbility || fallback.spellcastingAbility || "",
+    speed: member.speed || fallback.speed || "",
+    senses: member.senses || fallback.senses || "",
+    initiative: member.initiative ?? fallback.initiative ?? "",
+    xp: member.xp ?? fallback.xp ?? "",
+    abilities: member.abilities || fallback.abilities || "",
+    saves: member.saves || fallback.saves || "",
+    skills: member.skills || fallback.skills || "",
+    proficiencies: member.proficiencies || fallback.proficiencies || "",
+    languages: member.languages || fallback.languages || "",
+    attacks: member.attacks || fallback.attacks || "",
+    spells: member.spells || fallback.spells || "",
+    cantrips: member.cantrips || fallback.cantrips || "",
+    preparedSpells: member.preparedSpells || fallback.preparedSpells || "",
     status: member.status || fallback.status || "",
     hook: member.hook || fallback.hook || "",
     visible: member.visible || fallback.visible || "",
     imageUrl: member.imageUrl || "",
     beyondUrl: member.beyondUrl || "",
     beyondCharacterId: member.beyondCharacterId || "",
+    beyondApiUrl: member.beyondApiUrl || "",
+    campaignName: member.campaignName || "",
     gear: member.gear || "",
+    currency: member.currency || "",
     notes: member.notes || "",
     conditions: member.conditions || "",
     spotlight: member.spotlight || fallback.spotlight || member.hook || fallback.hook || "",
@@ -162,6 +233,13 @@ function importCenterWithDefaults(imports = {}, defaults = createDefaultImportCe
     history: Array.isArray(imports?.history) ? imports.history : defaults.history,
     review: imports?.review && typeof imports.review === "object" ? imports.review : null,
   };
+}
+
+function normalizeTurnOrder(turnOrder = [], participants = []) {
+  const participantIds = participants.map((participant) => participant.id);
+  const knownIds = new Set(participantIds);
+  const orderedIds = uniqueStrings(turnOrder).filter((id) => knownIds.has(id));
+  return [...orderedIds, ...participantIds.filter((id) => !orderedIds.includes(id))];
 }
 
 function createDefaultFactionClocks() {
@@ -207,6 +285,30 @@ function createDefaultFirefinger() {
   };
 }
 
+function createDefaultTravel() {
+  return {
+    routeName: "Port Nyanzaru -> Firefinger",
+    region: "Chult jungle, eerste expeditiedag richting Firefinger",
+    day: 1,
+    pace: "Normaal",
+    weather: "Warme regen, zware lucht, sterrenloze nacht op komst",
+    dc: 15,
+    routeProgress: 2,
+    routeProgressHexIndex: 2,
+    supplies: 8,
+    autoRouteDc: true,
+    includeDmInPrompts: true,
+    promptElements:
+      "Azaka's maskerspoor\nRed Wizard spoor alleen als DM-only element\nverticale jungle-niveaus als Firefinger dichtbij is",
+    selectedNodeId: "trail",
+    overlays: defaultTravelOverlays(),
+    mapNotes: "",
+    roles: defaultTravelRoles(campaign.party),
+    lastEvent: null,
+    history: [],
+  };
+}
+
 export function createWorkspaceState() {
   return {
     version: WORKSPACE_VERSION,
@@ -245,11 +347,16 @@ export function createWorkspaceState() {
       consequences: [],
       continuityAcknowledged: [],
     },
+    travel: createDefaultTravel(),
+    chultMap: createDefaultChultMapState(),
     party: {
       members: createDefaultPartyMembers(),
       snapshots: [],
     },
     imports: createDefaultImportCenter(),
+    npcs: {
+      generated: [],
+    },
     encounter: {
       activeEncounterId: encounters[0]?.id || "",
       activeTurn: 0,
@@ -272,6 +379,12 @@ export function normalizeWorkspaceState(value = {}) {
   const campaignOs = value.campaignOs && typeof value.campaignOs === "object" ? value.campaignOs : {};
   const party = value.party && typeof value.party === "object" ? value.party : {};
   const imports = value.imports && typeof value.imports === "object" ? value.imports : {};
+  const npcState = value.npcs && typeof value.npcs === "object" ? value.npcs : {};
+  const travel = value.travel && typeof value.travel === "object" ? value.travel : {};
+  const chultMap = value.chultMap && typeof value.chultMap === "object" ? value.chultMap : {};
+  const initiativeParticipants = Array.isArray(initiative.participants)
+    ? initiative.participants.map(initiativeParticipantWithDefaults)
+    : defaults.initiative.participants;
   const firefinger = campaignOs.firefinger && typeof campaignOs.firefinger === "object" ? campaignOs.firefinger : {};
 
   return {
@@ -313,6 +426,23 @@ export function normalizeWorkspaceState(value = {}) {
       consequences: Array.isArray(campaignOs.consequences) ? campaignOs.consequences : [],
       continuityAcknowledged: uniqueStrings(campaignOs.continuityAcknowledged),
     },
+    travel: {
+      ...defaults.travel,
+      ...travel,
+      day: Math.max(1, Number(travel.day || defaults.travel.day)),
+      dc: Math.max(5, Number(travel.dc || defaults.travel.dc)),
+      routeProgress: Math.max(0, Number(travel.routeProgress ?? defaults.travel.routeProgress)),
+      routeProgressHexIndex: Math.max(0, Number(travel.routeProgressHexIndex ?? travel.routeProgress ?? defaults.travel.routeProgressHexIndex)),
+      supplies: Math.max(0, Number(travel.supplies ?? defaults.travel.supplies)),
+      autoRouteDc: travel.autoRouteDc !== false,
+      includeDmInPrompts: travel.includeDmInPrompts !== false,
+      promptElements: travel.promptElements ?? defaults.travel.promptElements,
+      overlays: travel.overlays && typeof travel.overlays === "object" ? { ...defaults.travel.overlays, ...travel.overlays } : defaults.travel.overlays,
+      roles: Array.isArray(travel.roles) ? travel.roles : defaults.travel.roles,
+      history: Array.isArray(travel.history) ? travel.history : defaults.travel.history,
+      lastEvent: travel.lastEvent && typeof travel.lastEvent === "object" ? travel.lastEvent : null,
+    },
+    chultMap: normalizeChultMapState(chultMap, defaults.chultMap),
     party: {
       ...defaults.party,
       ...party,
@@ -322,6 +452,11 @@ export function normalizeWorkspaceState(value = {}) {
       snapshots: Array.isArray(party.snapshots) ? party.snapshots : defaults.party.snapshots,
     },
     imports: importCenterWithDefaults(imports, defaults.imports),
+    npcs: {
+      ...defaults.npcs,
+      ...npcState,
+      generated: Array.isArray(npcState.generated) ? npcState.generated : defaults.npcs.generated,
+    },
     encounter: {
       ...defaults.encounter,
       ...encounter,
@@ -338,9 +473,8 @@ export function normalizeWorkspaceState(value = {}) {
       round: Math.max(1, Number(initiative.round || 1)),
       activeIndex: Math.max(0, Number(initiative.activeIndex || 0)),
       quickAmount: Math.max(1, Number(initiative.quickAmount || defaults.initiative.quickAmount)),
-      participants: Array.isArray(initiative.participants)
-        ? initiative.participants.map(initiativeParticipantWithDefaults)
-        : defaults.initiative.participants,
+      participants: initiativeParticipants,
+      turnOrder: normalizeTurnOrder(initiative.turnOrder || defaults.initiative.turnOrder, initiativeParticipants),
       log: Array.isArray(initiative.log) ? initiative.log : [],
     },
   };

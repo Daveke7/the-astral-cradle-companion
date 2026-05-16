@@ -1,113 +1,165 @@
-import { ArrowRight, BookOpenCheck, Eye, FlaskConical, ScrollText, Swords, Users } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowRight,
+  BookOpenCheck,
+  Eye,
+  MapPinned,
+  Shield,
+  UploadCloud,
+  Users,
+} from "lucide-react";
 import { campaign, npcs, quests, scenes } from "../data/campaignData.js";
-import { Meter, Panel, Tag } from "./ui.jsx";
 
-export function Dashboard({ onNavigate, completedScenes, publishedCount, prepQuality }) {
-  const activeQuests = quests.filter((quest) => quest.status === "Active");
-  const importantNpcs = npcs.filter((npc) => ["Ally", "Hostile", "Missing"].includes(npc.status)).slice(0, 4);
+const playerActions = [
+  {
+    label: "Party",
+    module: "party",
+    icon: Shield,
+  },
+  {
+    label: "Player View",
+    module: "player",
+    icon: Users,
+  },
+  {
+    label: "Import",
+    module: "import",
+    icon: UploadCloud,
+  },
+  {
+    label: "Bekende quests",
+    module: "quests",
+    icon: BookOpenCheck,
+  },
+];
+
+function countActiveQuests() {
+  return quests.filter((quest) => quest.status === "Active").length;
+}
+
+function initials(name) {
+  return String(name || "?")
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part.at(0))
+    .join("")
+    .toUpperCase();
+}
+
+export function Dashboard({ workspace, onNavigate, completedScenes, publishedCount }) {
+  const travelEvent = workspace?.travel?.lastEvent;
+  const clocks = workspace?.campaignOs?.factionClocks || [];
+  const topClock = [...clocks].sort((left, right) => right.progress - left.progress)[0];
+  const importantNpc = npcs.find((npc) => npc.status === "Hostile") || npcs[0];
+  const routeDay = workspace?.travel?.day || 1;
+  const partyMembers = workspace?.party?.members || [];
+  const playerLocation = workspace?.playerView?.currentLocation || "Junglepad richting Firefinger";
+  const publishedCards = workspace?.playerView?.publishedCards?.length || 0;
 
   return (
-    <main className="workspace dashboard-grid">
-      <header className="topbar">
+    <main className="workspace v3-home">
+      <section className="v3-hero">
+        <div className="v3-hero__content">
+          <div className="v3-hero__meta">
+            <span>{campaign.name}</span>
+            <span>Chult Expeditie</span>
+            <span>{campaign.currentDate}</span>
+          </div>
+          <h1>Tafeloverzicht</h1>
+          <p>
+            Firefinger staat als een zwarte tand boven het bladerdak. De party volgt Azaka's spoor terwijl Zorath al verder de jungle in snijdt.
+          </p>
+          <div className="v3-hero__actions">
+            <button className="button button--primary" type="button" onClick={() => onNavigate("runtime")}>
+              <Eye size={18} /> Start sessie
+            </button>
+            <button className="button button--ghost" type="button" onClick={() => onNavigate("chult-map")}>
+              <MapPinned size={18} /> Open Chult kaart
+            </button>
+          </div>
+        </div>
+        <div className="v3-table-map" aria-label="Routebriefing voor de tafel">
+          <div className="v3-table-map__route">
+            <span className="is-done" />
+            <span className="is-active" />
+            <span />
+            <span />
+          </div>
+          <div>
+            <span>Huidig doel</span>
+            <strong>Bereik Firefinger</strong>
+            <p>Route dag {routeDay}. Dichte jungle, warme regen, sterrenloze hemel.</p>
+          </div>
+          <div className="v3-table-map__omens">
+            <strong>13</strong>
+            <span>zwarte nachten</span>
+          </div>
+        </div>
+      </section>
+
+      <section className="v3-dm-strip">
         <div>
-          <p className="label">Volgende sessie</p>
-          <h1>{campaign.nextSession.title}</h1>
-          <span>{campaign.nextSession.location}</span>
+          <strong>Spelers aan tafel</strong>
+          <span>
+            {playerLocation} - {publishedCards} gepubliceerde updates - {partyMembers.length} party dossiers.
+          </span>
         </div>
-        <div className="topbar__actions">
-          <button className="button button--ghost" type="button" onClick={() => onNavigate("prep")}>
-            <BookOpenCheck size={18} /> Prep sessie
-          </button>
-          <button className="button button--primary" type="button" onClick={() => onNavigate("runtime")}>
-            <Eye size={18} /> Start sessie
-          </button>
-        </div>
-      </header>
-
-      <Panel title="Sessie focus" className="span-2">
-        <div className="session-brief">
-          <div>
-            <p>{campaign.nextSession.strongStart}</p>
-            <div className="brief-meta">
-              <Tag tone="safe">Player-safe klaar: {publishedCount}</Tag>
-              <Tag tone="danger">DM-only actief</Tag>
-              <Tag>{completedScenes.size}/{scenes.length} scenes afgerond</Tag>
-            </div>
-          </div>
-          <div>
-            <span className="label">Prep status</span>
-            <strong>{prepQuality?.score ?? campaign.nextSession.prepStatus}%</strong>
-            <Meter value={prepQuality?.score ?? campaign.nextSession.prepStatus} tone={prepQuality?.score < 65 ? "danger" : "accent"} />
-            {prepQuality?.warnings?.length ? <small>{prepQuality.warnings.length} format aandachtspunten</small> : null}
-          </div>
-        </div>
-      </Panel>
-
-      <Panel title="Snelle knoppen">
-        <div className="quick-grid">
-          <button type="button" onClick={() => onNavigate("encounter")}><Swords size={17} /> Encounter</button>
-          <button type="button" onClick={() => onNavigate("npcs")}><Users size={17} /> NPC index</button>
-          <button type="button" onClick={() => onNavigate("quests")}><ScrollText size={17} /> Quests</button>
-          <button type="button" onClick={() => onNavigate("prep")}><FlaskConical size={17} /> AI import</button>
-        </div>
-      </Panel>
-
-      <Panel title="Open quests">
-        <div className="list-stack">
-          {activeQuests.map((quest) => (
-            <button className="row-link" key={quest.title} type="button" onClick={() => onNavigate("quests")}>
-              <span>
-                <strong>{quest.title}</strong>
-                <small>{quest.next}</small>
-              </span>
-              <ArrowRight size={16} />
+        <div className="v3-player-quick__party" aria-label="Party quick view">
+          {partyMembers.slice(0, 5).map((member) => (
+            <button key={member.name} type="button" onClick={() => onNavigate("party")}>
+              <span>{initials(member.name)}</span>
+              <strong>{member.name}</strong>
             </button>
           ))}
         </div>
-      </Panel>
-
-      <Panel title="Belangrijke NPCs">
-        <div className="npc-mini-list">
-          {importantNpcs.map((npc) => (
-            <div className="npc-mini" key={npc.name}>
-              <div className="avatar-slot">{npc.name.slice(0, 2)}</div>
-              <div>
-                <strong>{npc.name}</strong>
-                <span>{npc.role}</span>
-              </div>
-              <Tag tone={npc.status === "Hostile" ? "danger" : npc.status === "Ally" ? "safe" : "warning"}>
-                {npc.status}
-              </Tag>
-            </div>
-          ))}
+        <div className="v3-player-quick__actions">
+          {playerActions.map((action) => {
+            const Icon = action.icon;
+            return (
+              <button key={action.module} type="button" onClick={() => onNavigate(action.module)}>
+                <Icon size={16} /> {action.label}
+              </button>
+            );
+          })}
         </div>
-      </Panel>
+      </section>
 
-      <Panel title="Lopende clocks">
-        <div className="clock-list">
-          {campaign.clocks.map((clock) => (
-            <div className="clock-row" key={clock.name}>
-              <div>
-                <strong>{clock.name}</strong>
-                <small>{clock.danger}</small>
-              </div>
-              <Meter value={clock.progress} tone={clock.progress > 40 ? "danger" : "accent"} />
-            </div>
-          ))}
-        </div>
-      </Panel>
+      <section className="v3-focus-grid">
+        <article className="v3-focus-card v3-focus-card--primary">
+          <span>Sessiefocus</span>
+          <h2>Bereik Firefinger</h2>
+          <p>
+            Dag {routeDay} van de expeditie. De party volgt Azaka's spoor door Chult, met de Red Wizards nog steeds voor hen uit.
+          </p>
+          <div className="v3-focus-stats">
+            <div><strong>{countActiveQuests()}</strong><span>actieve quests</span></div>
+            <div><strong>{routeDay}</strong><span>reisdag</span></div>
+            <div><strong>{completedScenes.size}/{scenes.length}</strong><span>scenes klaar</span></div>
+            <div><strong>{publishedCount}</strong><span>player-safe</span></div>
+          </div>
+        </article>
 
-      <Panel title="Party status" className="span-2">
-        <div className="party-strip">
-          {campaign.party.map((pc) => (
-            <article className="pc-tile" key={pc.name}>
-              <strong>{pc.name}</strong>
-              <span>{pc.player}</span>
-              <small>{pc.status}</small>
-            </article>
-          ))}
-        </div>
-      </Panel>
+        <article className="v3-focus-card">
+          <span>Reisbeat</span>
+          <h2>{travelEvent?.title || "Nog geen event geresolved"}</h2>
+          <p>{travelEvent?.pressure || "Gebruik Jungle Travel om de volgende dag mechanisch en narratief te laten landen."}</p>
+          <button type="button" onClick={() => onNavigate("travel")}>
+            Open Jungle Travel <ArrowRight size={16} />
+          </button>
+        </article>
+
+        <article className="v3-focus-card v3-focus-card--danger">
+          <span>DM-only druk</span>
+          <h2>{topClock?.name || "Continuity check"}</h2>
+          <p>{topClock?.nextMove || "Controleer secrets, clues en player-safe tekst voordat je publiceert."}</p>
+          <div className="v3-warning-line">
+            <AlertTriangle size={18} />
+            <strong>{importantNpc?.name}</strong>
+            <span>{importantNpc?.status}</span>
+          </div>
+        </article>
+      </section>
     </main>
   );
 }

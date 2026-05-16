@@ -5,18 +5,19 @@ import { DmOnly, Panel, Tag } from "./ui.jsx";
 
 const filters = ["All", "Ally", "Hostile", "Missing", "Unknown"];
 
-export function NpcManager() {
+export function NpcManager({ generatedNpcs = [] }) {
   const [filter, setFilter] = useState("All");
   const [query, setQuery] = useState("");
+  const allNpcs = useMemo(() => [...generatedNpcs, ...npcs], [generatedNpcs]);
 
   const visibleNpcs = useMemo(
     () =>
-      npcs.filter((npc) => {
+      allNpcs.filter((npc) => {
         const matchesFilter = filter === "All" || npc.status === filter;
         const matchesQuery = `${npc.name} ${npc.role} ${npc.faction}`.toLowerCase().includes(query.toLowerCase());
         return matchesFilter && matchesQuery;
       }),
-    [filter, query]
+    [allNpcs, filter, query]
   );
 
   return (
@@ -61,8 +62,9 @@ export function NpcManager() {
                 <div><dt>Fear</dt><dd>{npc.fear}</dd></div>
                 <div><dt>Relatie</dt><dd>{npc.relationship}</dd></div>
               </dl>
+              {npc.hook ? <p><strong>Hook:</strong> {npc.hook}</p> : null}
               <p className="player-safe-line"><strong>Player-safe:</strong> {npc.visible}</p>
-              <DmOnly>{npc.secret}</DmOnly>
+              <DmOnly>{npc.secret || npc.dmOnly}</DmOnly>
             </article>
           ))}
         </div>

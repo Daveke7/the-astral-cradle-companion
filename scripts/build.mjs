@@ -68,6 +68,7 @@ await bundle.write({
 await bundle.close();
 
 await copyFile("src/styles.css", "dist/assets/styles.css");
+await copyFile("assets/chult-hex-grid-map.jpg", "dist/assets/chult-hex-grid-map.jpg");
 await writeFile(
   "dist/index.html",
   `<!doctype html>

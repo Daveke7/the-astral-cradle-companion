@@ -1,4 +1,4 @@
-import { Check, ClipboardCheck, Link2, RefreshCcw, Save, ShieldCheck } from "lucide-react";
+import { Check, ClipboardCheck, DownloadCloud, ExternalLink, Link2, RefreshCcw, Save, ShieldCheck } from "lucide-react";
 import { EmptyState, Meter, Panel, Tag } from "./ui.jsx";
 
 const sourceTypes = [
@@ -11,12 +11,27 @@ const reviewFields = [
   ["name", "Naam"],
   ["classSummary", "Class"],
   ["level", "Level"],
+  ["proficiencyBonus", "Prof"],
   ["race", "Race/species"],
+  ["background", "Background"],
+  ["alignment", "Alignment"],
   ["ac", "AC"],
+  ["currentHp", "Current HP"],
   ["maxHp", "Max HP"],
+  ["tempHp", "Temp HP"],
   ["passivePerception", "Passive Perception"],
   ["spellSaveDc", "Spell Save DC"],
+  ["spellAttackBonus", "Spell Attack"],
+  ["spellcastingAbility", "Spell Ability"],
+  ["speed", "Speed"],
+  ["abilities", "Abilities"],
+  ["attacks", "Attacks"],
+  ["spells", "Spells"],
+  ["preparedSpells", "Prepared"],
+  ["proficiencies", "Proficiencies"],
+  ["languages", "Languages"],
   ["gear", "Gear"],
+  ["currency", "Currency"],
   ["beyondCharacterId", "Beyond ID"],
 ];
 
@@ -42,7 +57,7 @@ export function ImportCenter({
         </div>
         <div className="topbar__actions">
           <button className="button button--ghost" type="button" onClick={onAnalyzeImport}>
-            <RefreshCcw size={18} /> Analyseer
+            <RefreshCcw size={18} /> Analyseer / haal op
           </button>
           <button className="button button--primary" type="button" onClick={onApplyImport} disabled={!review}>
             <Save size={18} /> Toepassen
@@ -93,9 +108,23 @@ export function ImportCenter({
               <textarea
                 value={importCenter.sourceText}
                 onChange={(event) => onPatchImportCenter({ sourceText: event.target.value })}
-                placeholder="Plak hier JSON, een PDF-copy/paste, of handmatige regels zoals Name:, Class:, Level:, AC:, HP:, Gear:."
+                placeholder="Plak hier D&D Beyond JSON, een PDF-copy/paste, of handmatige regels zoals Name:, Class:, Level:, AC:, HP:, Gear:."
               />
             </label>
+
+            <div className="import-helper-strip">
+              <span>
+                <DownloadCloud size={16} />
+                Beyond link probeert nu automatisch public character JSON op te halen.
+              </span>
+              {review?.beyondApiUrl ? (
+                <a href={review.beyondApiUrl} target="_blank" rel="noreferrer">
+                  <ExternalLink size={16} /> Open JSON fallback
+                </a>
+              ) : null}
+            </div>
+            {importCenter.lastBeyondFetch ? <p className="import-fetch-note">Laatste Beyond fetch: {importCenter.lastBeyondFetch}</p> : null}
+            {importCenter.fetchError ? <p className="monster-source-warning">{importCenter.fetchError}</p> : null}
           </Panel>
 
           <Panel title="Review voordat je opslaat">
@@ -181,8 +210,8 @@ export function ImportCenter({
 
           <Panel title="Regels">
             <ul className="rule-list">
-              <li>Geen login, scraping of automatische Beyond-sync.</li>
-              <li>URL wordt als referentie opgeslagen; data komt uit geplakte JSON of tekst.</li>
+              <li>Geen login of private account-sync: alleen publieke sheets of geplakte JSON.</li>
+              <li>Als de browser D&D Beyond blokkeert, open de JSON fallback en plak die inhoud.</li>
               <li>Review-to-save voorkomt dat een rommelige paste je party overschrijft.</li>
               <li>Snapshots bewaren tafel-relevante stats per sessiemoment.</li>
             </ul>

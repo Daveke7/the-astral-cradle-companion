@@ -2,38 +2,61 @@ import { useCallback, useMemo, useState } from "react";
 import { AppShell } from "./components/AppShell.jsx";
 import { CampaignHub } from "./components/CampaignHub.jsx";
 import { CampaignOs } from "./components/CampaignOs.jsx";
+import { ChultHexMap } from "./components/ChultHexMap.jsx";
+import { Compendium } from "./components/Compendium.jsx";
 import { Dashboard } from "./components/Dashboard.jsx";
 import { EncounterTracker } from "./components/EncounterTracker.jsx";
 import { ImportCenter } from "./components/ImportCenter.jsx";
 import { InitiativeTracker } from "./components/InitiativeTracker.jsx";
+import { JungleTravel } from "./components/JungleTravel.jsx";
 import { LiveRuntime } from "./components/LiveRuntime.jsx";
+import { MagicItemSheet } from "./components/MagicItemSheet.jsx";
+import { MagicShopGenerator } from "./components/MagicShopGenerator.jsx";
 import { MemoryGraph } from "./components/MemoryGraph.jsx";
 import { NpcManager } from "./components/NpcManager.jsx";
+import { PaletteLab } from "./components/PaletteLab.jsx";
 import { PartyPage } from "./components/PartyPage.jsx";
 import { PlayerView } from "./components/PlayerView.jsx";
 import { QuestLog } from "./components/QuestLog.jsx";
+import { RandomEncounterGenerator } from "./components/RandomEncounterGenerator.jsx";
+import { RandomNpcGenerator } from "./components/RandomNpcGenerator.jsx";
 import { SessionPrep } from "./components/SessionPrep.jsx";
+import { SpellSheet } from "./components/SpellSheet.jsx";
+import { TreasureGenerator } from "./components/TreasureGenerator.jsx";
 import { encounters, scenes as seedScenes } from "./data/campaignData.js";
+import { createDefaultHexNote } from "./data/systems/chultHexSystem.js";
 import { normalizeWorkspaceState } from "./data/workspaceState.js";
 import { analyzePrepQuality, buildRepairPrompt, parsePrepOutput } from "./utils/aiPrepParser.js";
-import { parsePartyImport } from "./utils/partyImportParser.js";
+import { buildChultRouteAnalysis, buildTravelInitiativeSeed, generateJungleTravelEvent } from "./utils/jungleTravelEngine.js";
+import { createParticipantFromMonster } from "./utils/monsterStatblocks.js";
+import { fetchDndBeyondCharacter, parsePartyImport } from "./utils/partyImportParser.js";
 import { useDebouncedSave } from "./utils/useDebouncedSave.js";
 import { loadWorkspaceState, saveWorkspaceState } from "./utils/workspaceStorage.js";
 
 const modules = [
-  { id: "dashboard", label: "Dashboard" },
-  { id: "campaign", label: "Campaign Hub" },
-  { id: "party", label: "Mijn Party" },
-  { id: "import", label: "Imports" },
-  { id: "memory", label: "Memory Graph" },
-  { id: "os", label: "Campaign OS" },
-  { id: "prep", label: "Sessie Prep" },
-  { id: "runtime", label: "Live Runtime" },
-  { id: "initiative", label: "Initiative" },
-  { id: "encounter", label: "Encounter" },
-  { id: "npcs", label: "NPCs" },
-  { id: "quests", label: "Quests" },
-  { id: "player", label: "Player View" },
+  { id: "dashboard", label: "Home", modes: ["play", "players"] },
+  { id: "runtime", label: "Live", modes: ["play"] },
+  { id: "travel", label: "Jungle Reis", modes: ["play", "generators"] },
+  { id: "chult-map", label: "Chult Kaart", modes: ["play", "make"] },
+  { id: "initiative", label: "Initiatief", modes: ["play"] },
+  { id: "spells", label: "Spells", modes: ["play", "make"] },
+  { id: "items", label: "Items", modes: ["play", "make", "players"] },
+  { id: "magic-shop", label: "Magic Shop", modes: ["make", "play", "generators"] },
+  { id: "treasure", label: "Treasure", modes: ["make", "play", "generators"] },
+  { id: "random-encounter", label: "Encounter Gen", modes: ["play", "make", "generators"] },
+  { id: "npc-gen", label: "NPC Gen", modes: ["generators", "make"] },
+  { id: "encounter", label: "Combat", modes: ["play"] },
+  { id: "player", label: "Spelersscherm", modes: ["play", "players"] },
+  { id: "prep", label: "Sessie Prep", modes: ["make"] },
+  { id: "campaign", label: "Campaign", modes: ["make"] },
+  { id: "os", label: "Campaign OS", modes: ["make"] },
+  { id: "compendium", label: "Compendium", modes: ["make", "generators"] },
+  { id: "quests", label: "Quests", modes: ["make", "players"] },
+  { id: "npcs", label: "NPCs", modes: ["make"] },
+  { id: "memory", label: "Memory", modes: ["make"] },
+  { id: "import", label: "Imports", modes: ["make", "players"] },
+  { id: "palette-lab", label: "Kleur Lab", modes: ["make"] },
+  { id: "party", label: "Mijn Party", modes: ["players"] },
 ];
 
 function App() {
@@ -179,6 +202,422 @@ function App() {
     }));
   }
 
+  function patchTravel(patch) {
+    persist((current) => ({
+      ...current,
+      travel: { ...current.travel, ...patch },
+    }));
+  }
+
+  function updateTravelRole(index, patch) {
+    persist((current) => ({
+      ...current,
+      travel: {
+        ...current.travel,
+        roles: current.travel.roles.map((role, roleIndex) =>
+          roleIndex === index ? { ...role, ...patch } : role
+        ),
+      },
+    }));
+  }
+
+  function rollTravelRole(index) {
+    const roll = Math.floor(Math.random() * 20) + 1;
+    updateTravelRole(index, { roll });
+  }
+
+  function generateTravelEvent() {
+    persist((current) => {
+      const event = generateJungleTravelEvent(current.travel, current.chultMap);
+      const discoveredHexes = Array.from(
+        new Set([...(current.chultMap.discoveredHexes || []), ...(event.routeImpact?.discoveredHexes || [])])
+      );
+      return {
+        ...current,
+        travel: {
+          ...current.travel,
+          ...(event.travelPatch || {}),
+          lastEvent: event,
+          history: [event, ...current.travel.history].slice(0, 20),
+        },
+        chultMap: {
+          ...current.chultMap,
+          discoveredHexes,
+          selectedHex: event.currentHex || current.chultMap.selectedHex,
+        },
+      };
+    });
+  }
+
+  function undoLastTravelEvent() {
+    persist((current) => {
+      const event = current.travel.lastEvent || current.travel.history?.[0];
+      if (!event) return current;
+
+      const routeAnalysis = buildChultRouteAnalysis(current.chultMap, {
+        ...current.travel,
+        routeProgress: 0,
+        routeProgressHexIndex: 0,
+      });
+      const eventHexIndex = routeAnalysis.routeHexes.findIndex((hexId) => hexId === event.currentHex);
+      const previousRouteIndex =
+        eventHexIndex >= 0
+          ? eventHexIndex
+          : Math.max(0, Number(event.routeImpact?.nextRouteIndex || 0) - Number(event.routeImpact?.progressGain || 0));
+      const previousSupplies = Math.max(
+        0,
+        Number(event.routeImpact?.suppliesAfter ?? current.travel.supplies) + Number(event.routeImpact?.supplyCost || 0)
+      );
+      const nextHistory = (current.travel.history || []).filter((historyEvent) => historyEvent.id !== event.id);
+
+      return {
+        ...current,
+        travel: {
+          ...current.travel,
+          day: Math.max(1, Number(event.day || current.travel.day || 1)),
+          routeProgress: previousRouteIndex,
+          routeProgressHexIndex: previousRouteIndex,
+          supplies: previousSupplies,
+          lastEvent: nextHistory[0] || null,
+          history: nextHistory,
+        },
+        chultMap: {
+          ...current.chultMap,
+          selectedHex: event.currentHex || current.chultMap.selectedHex,
+        },
+      };
+    });
+  }
+
+  function sendLastTravelEventToRuntime() {
+    persist((current) => {
+      const event = current.travel.lastEvent;
+      const sceneId = current.runtime.activeSceneId || scenes[0]?.id;
+      if (!event || !sceneId) return current;
+
+      const existingNote = current.runtime.notesByScene?.[sceneId] || "";
+      const eventNote = [
+        `## Travel dag ${event.day}: ${event.title}`,
+        `Outcome: ${event.outcome} | Hex: ${event.currentHex} | Terrain: ${event.currentTerrain}`,
+        `Read-aloud: ${event.readAloud}`,
+        `Mechanics: ${event.mechanics}`,
+        `Clue: ${event.clue}`,
+        `DM-only: ${event.dmOnly}`,
+      ].join("\n");
+
+      return {
+        ...current,
+        activeModule: "runtime",
+        runtime: {
+          ...current.runtime,
+          notesByScene: {
+            ...current.runtime.notesByScene,
+            [sceneId]: existingNote ? `${existingNote}\n\n${eventNote}` : eventNote,
+          },
+          panicLog: [
+            {
+              id: `travel-runtime-${event.id}`,
+              title: event.title,
+              type: "Travel Event",
+              text: event.pressure,
+              usedAt: new Date().toISOString(),
+            },
+            ...current.runtime.panicLog,
+          ].slice(0, 8),
+          updatedAt: new Date().toISOString(),
+        },
+      };
+    });
+  }
+
+  function publishLastTravelEventToPlayers() {
+    persist((current) => {
+      const event = current.travel.lastEvent;
+      if (!event) return current;
+      const publishedAt = new Date().toISOString();
+      const publishedRouteHexes = Array.from(
+        new Set([...(current.chultMap.publishedRouteHexes || []), ...(event.routeImpact?.discoveredHexes || [])])
+      );
+
+      return {
+        ...current,
+        activeModule: "player",
+        chultMap: {
+          ...current.chultMap,
+          publishedRouteHexes,
+        },
+        playerView: {
+          ...current.playerView,
+          mode: "travel",
+          currentLocation: event.currentTerrain || current.playerView.currentLocation,
+          publishedCards: [
+            {
+              id: `travel-player-${event.id}`,
+              type: "travel",
+              title: event.title,
+              body: event.playerSafe,
+              publishedAt,
+            },
+            ...current.playerView.publishedCards,
+          ].slice(0, 12),
+          lastPublishedAt: publishedAt,
+        },
+      };
+    });
+  }
+
+  function seedInitiativeFromLastTravelEvent() {
+    persist((current) => {
+      const event = current.travel.lastEvent;
+      if (!event) return current;
+      const partyTurns = current.initiative.participants.filter((participant) => participant.side === "party");
+      const seed = buildTravelInitiativeSeed(event, partyTurns);
+
+      return {
+        ...current,
+        activeModule: "initiative",
+        initiative: {
+          ...current.initiative,
+          encounterName: seed.encounterName,
+          round: seed.round,
+          activeIndex: seed.activeIndex,
+          objective: seed.objective,
+          timer: seed.timer,
+          lairActionName: seed.lairActionName,
+          participants: seed.participants,
+          log: [seed.logLine, ...current.initiative.log].slice(0, 12),
+        },
+      };
+    });
+  }
+
+  function seedRandomEncounterToInitiative(encounter) {
+    persist((current) => {
+      const partyTurns = current.initiative.participants.filter((participant) =>
+        ["party", "ally"].includes(participant.side)
+      );
+      const enemies = encounter.monsters.flatMap((entry) =>
+        Array.from({ length: entry.count }, (_, index) =>
+          createParticipantFromMonster(entry.monster, entry.count > 1 ? index + 1 : 1)
+        )
+      );
+
+      return {
+        ...current,
+        activeModule: "initiative",
+        initiative: {
+          ...current.initiative,
+          encounterName: encounter.title,
+          round: 1,
+          activeIndex: 0,
+          objective: encounter.objective,
+          timer: encounter.timer,
+          lairActionName: encounter.shape === "hazard" || encounter.shape === "lair" ? "Terrain pressure op initiative 20" : current.initiative.lairActionName,
+          participants: [...partyTurns, ...enemies],
+          log: [
+            `R1: random encounter seeded (${encounter.adjustedXp} adjusted XP, ${encounter.difficulty}).`,
+            ...current.initiative.log,
+          ].slice(0, 12),
+        },
+      };
+    });
+  }
+
+  function saveGeneratedNpc(npc) {
+    persist((current) => ({
+      ...current,
+      npcs: {
+        ...(current.npcs || {}),
+        generated: [
+          {
+            ...npc,
+            generatedAt: new Date().toISOString(),
+          },
+          ...((current.npcs || {}).generated || []).filter((item) => item.id !== npc.id),
+        ].slice(0, 80),
+      },
+    }));
+  }
+
+  function patchChultMap(patch) {
+    persist((current) => ({
+      ...current,
+      chultMap: { ...current.chultMap, ...patch },
+    }));
+  }
+
+  function saveChultRoutePreset(name) {
+    persist((current) => {
+      const routeHexes = current.chultMap.routeHexes || [];
+      if (!routeHexes.length) return current;
+      const safeName = String(name || current.travel.routeName || "Nieuwe Chult route").trim();
+      const preset = {
+        id: `route-${Date.now()}`,
+        name: safeName,
+        waypoints: routeHexes,
+        updatedAt: new Date().toISOString(),
+      };
+      return {
+        ...current,
+        travel: {
+          ...current.travel,
+          routeName: safeName,
+        },
+        chultMap: {
+          ...current.chultMap,
+          activeRoutePresetId: preset.id,
+          routePresets: [preset, ...(current.chultMap.routePresets || [])].slice(0, 12),
+        },
+      };
+    });
+  }
+
+  function applyChultRoutePreset(presetId) {
+    persist((current) => {
+      const preset = (current.chultMap.routePresets || []).find((item) => item.id === presetId);
+      if (!preset) return current;
+      const waypoints = preset.waypoints || [];
+      return {
+        ...current,
+        travel: {
+          ...current.travel,
+          routeName: preset.name,
+          routeProgress: 0,
+          routeProgressHexIndex: 0,
+        },
+        chultMap: {
+          ...current.chultMap,
+          activeRoutePresetId: preset.id,
+          routeHexes: waypoints,
+          selectedHex: waypoints[waypoints.length - 1] || current.chultMap.selectedHex,
+        },
+      };
+    });
+  }
+
+  function publishChultRouteToPlayers() {
+    persist((current) => {
+      const routeAnalysis = buildChultRouteAnalysis(current.chultMap, current.travel);
+      const progressIndex = Math.min(
+        Math.max(0, Number(current.travel.routeProgressHexIndex || 0)),
+        Math.max(0, routeAnalysis.routeHexes.length - 1)
+      );
+      const routeSlice = routeAnalysis.routeHexes.slice(0, progressIndex + 1);
+      const currentHex = routeAnalysis.hexes[progressIndex] || routeAnalysis.currentHex;
+      const publishedAt = new Date().toISOString();
+
+      return {
+        ...current,
+        activeModule: "player",
+        chultMap: {
+          ...current.chultMap,
+          publishedRouteHexes: Array.from(new Set([...(current.chultMap.publishedRouteHexes || []), ...routeSlice])),
+        },
+        playerView: {
+          ...current.playerView,
+          mode: "travel",
+          currentLocation: currentHex.title,
+          publishedCards: [
+            {
+              id: `route-publish-${publishedAt}`,
+              type: "route",
+              title: `Expeditieroute: ${current.travel.routeName}`,
+              body: `${routeSlice.length} bekende routehexes. Huidige locatie: ${currentHex.title}. Afstand bekend: ongeveer ${Math.round(
+                Math.max(0, routeSlice.length - 1) * 10 * 1.60934
+              )} km.`,
+              publishedAt,
+            },
+            ...current.playerView.publishedCards,
+          ].slice(0, 12),
+          lastPublishedAt: publishedAt,
+        },
+      };
+    });
+  }
+
+  function selectChultHex(selectedHex) {
+    persist((current) => ({
+      ...current,
+      chultMap: { ...current.chultMap, selectedHex },
+    }));
+  }
+
+  function patchChultHex(hexId, patch) {
+    persist((current) => {
+      const currentNote = current.chultMap.notesByHex?.[hexId] || createDefaultHexNote(hexId);
+      return {
+        ...current,
+        chultMap: {
+          ...current.chultMap,
+          selectedHex: hexId,
+          notesByHex: {
+            ...current.chultMap.notesByHex,
+            [hexId]: {
+              ...currentNote,
+              ...patch,
+              hexId,
+              updatedAt: new Date().toISOString(),
+            },
+          },
+        },
+      };
+    });
+  }
+
+  function toggleChultOverlay(overlayId) {
+    persist((current) => ({
+      ...current,
+      chultMap: {
+        ...current.chultMap,
+        overlays: {
+          ...current.chultMap.overlays,
+          [overlayId]: !current.chultMap.overlays?.[overlayId],
+        },
+      },
+    }));
+  }
+
+  function toggleChultRouteHex(hexId) {
+    persist((current) => {
+      const routeHexes = current.chultMap.routeHexes.includes(hexId)
+        ? current.chultMap.routeHexes.filter((item) => item !== hexId)
+        : [...current.chultMap.routeHexes, hexId];
+      return {
+        ...current,
+        chultMap: {
+          ...current.chultMap,
+          routeHexes,
+          selectedHex: hexId,
+        },
+      };
+    });
+  }
+
+  function markChultDiscovered(hexId) {
+    persist((current) => {
+      const discoveredHexes = current.chultMap.discoveredHexes.includes(hexId)
+        ? current.chultMap.discoveredHexes
+        : [...current.chultMap.discoveredHexes, hexId];
+      const currentNote = current.chultMap.notesByHex?.[hexId] || createDefaultHexNote(hexId);
+      return {
+        ...current,
+        chultMap: {
+          ...current.chultMap,
+          selectedHex: hexId,
+          discoveredHexes,
+          notesByHex: {
+            ...current.chultMap.notesByHex,
+            [hexId]: {
+              ...currentNote,
+              status: currentNote.status === "unknown" ? "discovered" : currentNote.status,
+              updatedAt: new Date().toISOString(),
+            },
+          },
+        },
+      };
+    });
+  }
+
   function patchCampaignOs(patch) {
     persist((current) => ({
       ...current,
@@ -255,14 +694,37 @@ function App() {
     }));
   }
 
-  function analyzePartyImport() {
-    persist((current) => ({
-      ...current,
-      imports: {
+  async function analyzePartyImport() {
+    const imports = workspace.imports;
+    let sourceText = imports.sourceText;
+    let fetchError = "";
+    let lastBeyondFetch = imports.lastBeyondFetch || "";
+
+    if (imports.sourceType === "beyond-url" && imports.url) {
+      try {
+        const fetched = await fetchDndBeyondCharacter(imports.url);
+        sourceText = JSON.stringify(fetched.payload, null, 2);
+        lastBeyondFetch = `${fetched.endpoint} @ ${new Date().toLocaleString("nl-NL")}`;
+      } catch (error) {
+        fetchError = error.message || "D&D Beyond kon niet automatisch worden opgehaald.";
+      }
+    }
+
+    persist((current) => {
+      const nextImports = {
         ...current.imports,
-        review: parsePartyImport(current.imports),
-      },
-    }));
+        sourceText,
+        fetchError,
+        lastBeyondFetch,
+      };
+      return {
+        ...current,
+        imports: {
+          ...nextImports,
+          review: parsePartyImport(nextImports),
+        },
+      };
+    });
   }
 
   function applyPartyImport() {
@@ -275,15 +737,39 @@ function App() {
         "name",
         "classSummary",
         "level",
+        "proficiencyBonus",
         "race",
+        "background",
+        "alignment",
         "ac",
         "maxHp",
+        "currentHp",
+        "tempHp",
         "passivePerception",
         "spellSaveDc",
+        "spellAttackBonus",
+        "spellcastingAbility",
+        "speed",
+        "senses",
+        "initiative",
+        "xp",
+        "abilities",
+        "saves",
+        "skills",
+        "proficiencies",
+        "languages",
+        "attacks",
+        "spells",
+        "cantrips",
+        "preparedSpells",
         "gear",
+        "currency",
         "notes",
+        "imageUrl",
         "beyondUrl",
         "beyondCharacterId",
+        "beyondApiUrl",
+        "campaignName",
       ];
       return {
         ...current,
@@ -321,11 +807,22 @@ function App() {
         classSummary: member.classSummary,
         level: member.level,
         race: member.race,
+        background: member.background,
+        alignment: member.alignment,
         ac: member.ac,
+        currentHp: member.currentHp,
         maxHp: member.maxHp,
+        tempHp: member.tempHp,
         passivePerception: member.passivePerception,
         spellSaveDc: member.spellSaveDc,
+        speed: member.speed,
+        abilities: member.abilities,
+        attacks: member.attacks,
+        spells: member.spells,
+        proficiencies: member.proficiencies,
+        languages: member.languages,
         gear: member.gear,
+        currency: member.currency,
         conditions: member.conditions,
         notes: member.notes,
         beyondUrl: member.beyondUrl,
@@ -372,32 +869,58 @@ function App() {
   function addInitiativeParticipant() {
     persist((current) => ({
       ...current,
-      initiative: {
-        ...current.initiative,
-        participants: [
-          ...current.initiative.participants,
-          {
-            id: `turn-${Date.now()}`,
-            name: "Nieuwe deelnemer",
-            side: "enemy",
-            role: "",
-            initiative: 0,
-            dexMod: 0,
-            ac: 10,
-            hp: 1,
-            maxHp: 1,
-            tempHp: 0,
-            conditions: [],
-            concentration: false,
-            reactionUsed: false,
-            legendaryActions: 0,
-            lairAction: false,
-            notes: "",
-            hiddenFromPlayers: false,
-          },
-        ],
-      },
+      initiative: (() => {
+        const participant = {
+          id: `turn-${Date.now()}`,
+          name: "",
+          side: "enemy",
+          role: "",
+          initiative: 0,
+          dexMod: 0,
+          ac: 10,
+          hp: 1,
+          maxHp: 1,
+          tempHp: 0,
+          conditions: [],
+          concentration: false,
+          reactionUsed: false,
+          legendaryActions: 0,
+          lairAction: false,
+          notes: "",
+          hiddenFromPlayers: false,
+        };
+        return {
+          ...current.initiative,
+          participants: [...current.initiative.participants, participant],
+          turnOrder: [...(current.initiative.turnOrder || current.initiative.participants.map((item) => item.id)), participant.id],
+        };
+      })(),
     }));
+  }
+
+  function addInitiativeMonster(monster, count = 1) {
+    persist((current) => {
+      const amount = Math.max(1, Math.min(12, Number(count || 1)));
+      const newParticipants = Array.from({ length: amount }, (_, index) =>
+        createParticipantFromMonster(monster, amount > 1 ? index + 1 : 1)
+      );
+
+      return {
+        ...current,
+        initiative: {
+          ...current.initiative,
+          participants: [...current.initiative.participants, ...newParticipants],
+          turnOrder: [
+            ...(current.initiative.turnOrder || current.initiative.participants.map((participant) => participant.id)),
+            ...newParticipants.map((participant) => participant.id),
+          ],
+          log: [
+            `R${current.initiative.round}: ${amount}x ${monster.name} toegevoegd aan combat.`,
+            ...current.initiative.log,
+          ].slice(0, 12),
+        },
+      };
+    });
   }
 
   function removeInitiativeParticipant(participantId) {
@@ -407,6 +930,7 @@ function App() {
         ...current.initiative,
         activeIndex: 0,
         participants: current.initiative.participants.filter((participant) => participant.id !== participantId),
+        turnOrder: (current.initiative.turnOrder || []).filter((id) => id !== participantId),
       },
     }));
   }
@@ -420,6 +944,7 @@ function App() {
         activeIndex: 0,
         log: [],
         participants: [],
+        turnOrder: [],
       },
     }));
   }
@@ -451,6 +976,7 @@ function App() {
   const screen = {
     dashboard: (
       <Dashboard
+        workspace={workspace}
         onNavigate={setActiveModule}
         completedScenes={completedSceneSet}
         publishedCount={publishedSceneSet.size}
@@ -458,6 +984,8 @@ function App() {
       />
     ),
     campaign: <CampaignHub workspace={workspace} />,
+    compendium: <Compendium />,
+    "palette-lab": <PaletteLab />,
     party: <PartyPage members={workspace.party.members} onPatchMember={patchPartyMember} />,
     import: (
       <ImportCenter
@@ -517,6 +1045,37 @@ function App() {
         onAddPanicPrompt={addPanicPrompt}
       />
     ),
+    travel: (
+      <JungleTravel
+        travel={workspace.travel}
+        chultMap={workspace.chultMap}
+        partyMembers={workspace.party.members}
+        onPatchTravel={patchTravel}
+        onUpdateRole={updateTravelRole}
+        onRollRole={rollTravelRole}
+        onGenerateEvent={generateTravelEvent}
+        onUndoLastTravelEvent={undoLastTravelEvent}
+        onSendEventToRuntime={sendLastTravelEventToRuntime}
+        onPublishEventToPlayers={publishLastTravelEventToPlayers}
+        onSeedInitiative={seedInitiativeFromLastTravelEvent}
+        onNavigate={setActiveModule}
+      />
+    ),
+    "chult-map": (
+      <ChultHexMap
+        chultMap={workspace.chultMap}
+        onPatchMap={patchChultMap}
+        onSelectHex={selectChultHex}
+        onPatchHex={patchChultHex}
+        onToggleOverlay={toggleChultOverlay}
+        onToggleRouteHex={toggleChultRouteHex}
+        onMarkDiscovered={markChultDiscovered}
+        onSaveRoutePreset={saveChultRoutePreset}
+        onApplyRoutePreset={applyChultRoutePreset}
+        onPublishRoute={publishChultRouteToPlayers}
+        onNavigateTravel={() => setActiveModule("travel")}
+      />
+    ),
     encounter: (
       <EncounterTracker
         encounterState={workspace.encounter}
@@ -534,17 +1093,26 @@ function App() {
         onPatchInitiative={patchInitiative}
         onUpdateParticipant={updateInitiativeParticipant}
         onAddParticipant={addInitiativeParticipant}
+        onAddMonster={addInitiativeMonster}
         onRemoveParticipant={removeInitiativeParticipant}
         onResetInitiative={resetInitiative}
       />
     ),
-    npcs: <NpcManager />,
+    spells: <SpellSheet />,
+    items: <MagicItemSheet />,
+    "magic-shop": <MagicShopGenerator />,
+    treasure: <TreasureGenerator />,
+    "random-encounter": <RandomEncounterGenerator onSeedInitiative={seedRandomEncounterToInitiative} />,
+    "npc-gen": <RandomNpcGenerator generatedNpcs={workspace.npcs?.generated || []} onSaveNpc={saveGeneratedNpc} />,
+    npcs: <NpcManager generatedNpcs={workspace.npcs?.generated || []} />,
     quests: <QuestLog />,
     player: (
       <PlayerView
         scenes={scenes}
         playerView={workspace.playerView}
         partyMembers={workspace.party.members}
+        chultMap={workspace.chultMap}
+        travel={workspace.travel}
         publishScene={publishScene}
       />
     ),

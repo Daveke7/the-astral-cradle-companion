@@ -1,5 +1,14 @@
-import { expandHexRoute, parseHexId } from "../data/systems/chultHexSystem.js";
-import { TRAVEL_EVENT_TABLES, TRAVEL_ROLE_LABELS, defaultTravelRoles } from "../data/systems/travelSystem.js";
+import { expandHexRoute, getNeighborHexIds, parseHexId } from "../data/systems/chultHexSystem.js";
+import {
+  TRAVEL_BACKUP_ENCOUNTER_TABLES,
+  TRAVEL_EVENT_TABLES,
+  TRAVEL_RESOURCE_DEFAULTS,
+  TRAVEL_ROLE_LABELS,
+  TOA_WILDERNESS_COLUMNS,
+  TOA_WILDERNESS_ENCOUNTERS,
+  defaultTravelRoles,
+} from "../data/systems/travelSystem.js";
+import { getToaEncounterDetail } from "../data/systems/toaEncounterDetails.js";
 
 const PACE_PROFILES = {
   Voorzichtig: { label: "Voorzichtig", progress: 0.85, supplyMultiplier: 0.9, dcModifier: -1 },
@@ -188,8 +197,38 @@ function splitTerms(value) {
     .filter(Boolean);
 }
 
+function parseRange(range) {
+  const value = String(range || "").trim();
+  if (!value) return null;
+  const [rawMin, rawMax = rawMin] = value.split("-");
+  const min = Number(rawMin === "00" ? 100 : rawMin);
+  const max = Number(rawMax === "00" ? 100 : rawMax);
+  if (!Number.isFinite(min) || !Number.isFinite(max)) return null;
+  return { min, max };
+}
+
+function inRange(roll, range) {
+  const parsed = parseRange(range);
+  return parsed ? roll >= parsed.min && roll <= parsed.max : false;
+}
+
 function unique(values) {
   return Array.from(new Set(values.filter(Boolean)));
+}
+
+function normalizeResources(resources = {}) {
+  return {
+    ...TRAVEL_RESOURCE_DEFAULTS,
+    ...(resources && typeof resources === "object" ? resources : {}),
+    partySize: Math.max(1, numeric(resources.partySize) || TRAVEL_RESOURCE_DEFAULTS.partySize),
+    water: Math.max(0, numeric(resources.water ?? TRAVEL_RESOURCE_DEFAULTS.water)),
+    rations: Math.max(0, numeric(resources.rations ?? TRAVEL_RESOURCE_DEFAULTS.rations)),
+    insectRepellent: Math.max(0, numeric(resources.insectRepellent ?? TRAVEL_RESOURCE_DEFAULTS.insectRepellent)),
+    raincatchers: Math.max(0, numeric(resources.raincatchers ?? TRAVEL_RESOURCE_DEFAULTS.raincatchers)),
+    waterPerPerson: Math.max(0, numeric(resources.waterPerPerson ?? TRAVEL_RESOURCE_DEFAULTS.waterPerPerson)),
+    rationsPerPerson: Math.max(0, numeric(resources.rationsPerPerson ?? TRAVEL_RESOURCE_DEFAULTS.rationsPerPerson)),
+    useInsectRepellent: resources.useInsectRepellent !== false,
+  };
 }
 
 function textForHex(note = {}) {
@@ -408,6 +447,209 @@ function supplyCostForOutcome(outcome, scoredRoles, currentHex, pace) {
   return Math.max(0, base + penalty - save);
 }
 
+export function buildTravelResourceForecast(travelState = {}, routeAnalysisInput = null, scoredRoles = []) {
+  const routeAnalysis = routeAnalysisInput || buildChultRouteAnalysis({}, travelState);
+  const resources = normalizeResources(travelState.resources);
+  const weatherText = String(travelState.weather || "").toLowerCase();
+  const rainy = weatherText.includes("regen") || weatherText.includes("rain") || weatherText.includes("storm");
+  const forcedPace = travelState.pace === "Geforceerd";
+  const quartermaster = scoredRoles.find((role) => role.id === "quartermaster");
+  const waterBase = Math.ceil(resources.partySize * resources.waterPerPerson);
+  const waterPacePenalty = forcedPace ? Math.ceil(resources.partySize * 0.5) : 0;
+  const terrainWaterPenalty = ["swamp", "mountains", "firefinger"].includes(routeAnalysis.currentHex?.terrainId) ? 1 : 0;
+  const waterRainGain = rainy ? Math.min(waterBase, resources.raincatchers * 2) : 0;
+  const quartermasterSave = quartermaster?.status === "strong" ? 1 : 0;
+  const waterUsed = Math.max(0, waterBase + waterPacePenalty + terrainWaterPenalty - waterRainGain - quartermasterSave);
+  const rationsUsed = Math.max(0, Math.ceil(resources.partySize * resources.rationsPerPerson) - (quartermaster?.status === "success" || quartermaster?.status === "strong" ? 1 : 0));
+  const repellentUsed = resources.useInsectRepellent && ["jungle", "denseJungle", "swamp", "river"].includes(routeAnalysis.currentHex?.terrainId) ? 1 : 0;
+  const after = {
+    ...resources,
+    water: Math.max(0, resources.water - waterUsed),
+    rations: Math.max(0, resources.rations - rationsUsed),
+    insectRepellent: Math.max(0, resources.insectRepellent - repellentUsed),
+  };
+  const warnings = [
+    resources.water < waterUsed ? "Watertekort: exhaustion pressure of trager tempo." : "",
+    resources.rations < rationsUsed ? "Rationtekort: long rest of morale onder druk." : "",
+    repellentUsed && resources.insectRepellent < repellentUsed ? "Geen insect repellent: ziekte/insect pressure." : "",
+    forcedPace ? "Geforceerd tempo verhoogt waterverbruik." : "",
+  ].filter(Boolean);
+
+  return {
+    before: resources,
+    after,
+    waterUsed,
+    rationsUsed,
+    repellentUsed,
+    waterRainGain,
+    rainy,
+    warnings,
+    summary: `Water -${waterUsed}, rations -${rationsUsed}, repellent -${repellentUsed}.${warnings.length ? ` ${warnings[0]}` : ""}`,
+  };
+}
+
+export function buildToaMovementForecast(travelState = {}, routeAnalysisInput = null) {
+  const routeAnalysis = routeAnalysisInput || buildChultRouteAnalysis({}, travelState);
+  const mode = travelState.transportMode || "foot";
+  const pace = travelState.pace || "Normaal";
+  const terrain = routeAnalysis.currentHex?.terrainId || "jungle";
+  const isRiverOrLake = terrain === "river" || String(routeAnalysis.currentHex?.terrainLabel || "").toLowerCase().includes("lake");
+  const isSwamp = terrain === "swamp";
+  const normalHexes = mode === "flying30" ? 3 : mode === "canoe" && isRiverOrLake ? 2 : 1;
+  const adjustedNormal = mode === "canoe" && isSwamp ? 1 : normalHexes;
+  const label =
+    mode === "flying30"
+      ? "Flying 30 ft: ongeveer 4 miles per uur"
+      : pace === "Geforceerd"
+        ? `${adjustedNormal} hex + d4 kans op +1`
+        : pace === "Voorzichtig"
+          ? `${Math.max(0, adjustedNormal - 1)}-${adjustedNormal} hex, stealth mogelijk`
+          : `${adjustedNormal} hex per dag`;
+  const perceptionPenalty = pace === "Geforceerd" ? -5 : 0;
+  const navigationModifier = pace === "Voorzichtig" ? 5 : pace === "Geforceerd" ? -5 : 0;
+
+  return {
+    mode,
+    pace,
+    baseHexes: adjustedNormal,
+    label,
+    miles: adjustedNormal * MILES_PER_HEX,
+    kilometers: Math.round(adjustedNormal * MILES_PER_HEX * KILOMETERS_PER_MILE),
+    perceptionPenalty,
+    navigationModifier,
+  };
+}
+
+function toaNavigationDc(currentHex = {}) {
+  return currentHex.terrainId === "coast" || currentHex.terrainId === "settlement" ? 10 : 15;
+}
+
+function directionLabel(fromHex, toHex) {
+  const from = parseHexId(fromHex);
+  const to = parseHexId(toHex);
+  if (!from || !to) return "onbekend";
+  const dc = to.column - from.column;
+  const dr = to.row - from.row;
+  if (dc === 0 && dr < 0) return "noord";
+  if (dc === 0 && dr > 0) return "zuid";
+  if (dc < 0 && dr <= 0) return "noordwest";
+  if (dc < 0) return "zuidwest";
+  if (dc > 0 && dr <= 0) return "noordoost";
+  return "zuidoost";
+}
+
+export function rollTravelLostCheck(travelState = {}, chultMap = {}) {
+  const routeAnalysis = buildChultRouteAnalysis(chultMap, travelState);
+  const movement = buildToaMovementForecast(travelState, routeAnalysis);
+  const dc = toaNavigationDc(routeAnalysis.currentHex);
+  const guide = (travelState.roles || []).find((role) => role.id === "guide") || {};
+  const roll = numeric(guide.roll);
+  const total = roleTotal(guide) + movement.navigationModifier;
+  const intendedHex = routeAnalysis.routeHexes[routeAnalysis.routeProgressHexIndex + 1] || routeAnalysis.currentHex.hexId;
+  const neighbors = getNeighborHexIds(routeAnalysis.currentHex.hexId);
+  const driftOptions = neighbors.filter((hexId) => hexId !== intendedHex);
+  const driftHex = randomItem(driftOptions.length ? driftOptions : neighbors) || routeAnalysis.currentHex.hexId;
+  const success = roll >= 20 || total >= dc;
+
+  return {
+    id: `lost-${Date.now()}`,
+    checkedAt: new Date().toISOString(),
+    active: !success,
+    success,
+    dc,
+    paceModifier: movement.navigationModifier,
+    navigator: guide.character || "Guide",
+    roll,
+    total,
+    fromHex: routeAnalysis.currentHex.hexId,
+    intendedHex,
+    driftHex: success ? "" : driftHex,
+    driftDirection: success ? "" : directionLabel(routeAnalysis.currentHex.hexId, driftHex),
+    message: success
+      ? `${guide.character || "De guide"} houdt de route vast. De party blijft op koers naar ${intendedHex}.`
+      : `${guide.character || "De guide"} mist de subtiele afslag. De party drijft ${directionLabel(routeAnalysis.currentHex.hexId, driftHex)} richting hex ${driftHex}.`,
+  };
+}
+
+function tableForTerrain(terrainId = "jungle") {
+  if (TRAVEL_BACKUP_ENCOUNTER_TABLES[terrainId]) return TRAVEL_BACKUP_ENCOUNTER_TABLES[terrainId];
+  if (terrainId === "settlement") return TRAVEL_BACKUP_ENCOUNTER_TABLES.coast;
+  return TRAVEL_BACKUP_ENCOUNTER_TABLES.jungle;
+}
+
+function inferToaColumn(routeAnalysis, travelState = {}) {
+  if (travelState.backupEncounter?.tableColumn) return travelState.backupEncounter.tableColumn;
+  const terrainId = routeAnalysis.currentHex?.terrainId || "jungle";
+  if (terrainId === "coast" || terrainId === "settlement") return "beach";
+  if (terrainId === "mountains" || terrainId === "firefinger") return "mountains";
+  if (terrainId === "river") return "rivers";
+  if (terrainId === "ruins") return "ruins";
+  if (terrainId === "swamp") return "swamp";
+  return "jungleNoUndead";
+}
+
+function rowsForToaColumn(column) {
+  return TOA_WILDERNESS_ENCOUNTERS
+    .filter((entry) => entry[column])
+    .map((entry) => ({ ...entry, range: entry[column] }));
+}
+
+export function rollTravelBackupEncounter(travelState = {}, chultMap = {}) {
+  const routeAnalysis = buildChultRouteAnalysis(chultMap, travelState);
+  const dayPart = travelState.backupEncounter?.dayPart || "Ochtend";
+  const tableMode = travelState.backupEncounter?.tableMode || "toa";
+
+  if (tableMode === "toa") {
+    const tableColumn = inferToaColumn(routeAnalysis, travelState);
+    const encounterCheck = Math.floor(Math.random() * 20) + 1;
+    const threshold = clampNumber(numeric(travelState.backupEncounter?.threshold) || 16, 1, 20);
+    const rows = rowsForToaColumn(tableColumn);
+    const percentileRoll = Math.floor(Math.random() * 100) + 1;
+    const entry = rows.find((row) => inRange(percentileRoll, row.range));
+    const columnLabel = TOA_WILDERNESS_COLUMNS.find((column) => column.id === tableColumn)?.label || tableColumn;
+    const detail = entry ? getToaEncounterDetail(entry.name) : null;
+
+    return {
+      id: `toa-encounter-${Date.now()}`,
+      tableMode,
+      rolledAt: new Date().toISOString(),
+      dayPart,
+      tableColumn,
+      terrainId: routeAnalysis.currentHex.terrainId,
+      terrainLabel: columnLabel,
+      encounterCheck,
+      threshold,
+      occurs: encounterCheck >= threshold,
+      roll: percentileRoll,
+      range: entry?.range || "",
+      title: entry?.name || "Geen match",
+      type: "ToA Wilderness d100",
+      detail,
+      pressure: encounterCheck >= threshold
+        ? `${columnLabel}: d100 ${percentileRoll} -> ${entry?.name || "geen match"}.`
+        : `Geen random encounter. d20 ${encounterCheck} is lager dan ${threshold}.`,
+      setup: encounterCheck >= threshold
+        ? detail?.preview || "Open de detailkaart hieronder voor de encountertekst."
+        : "Geen encounter deze periode. Houd alleen sfeer, sporen of resource pressure over.",
+    };
+  }
+
+  const terrainId = travelState.backupEncounter?.terrainId || routeAnalysis.currentHex.terrainId || "jungle";
+  const table = tableForTerrain(terrainId);
+  const roll = Math.floor(Math.random() * 20) + 1;
+  const entry = table.find((item) => roll >= item.min && roll <= item.max) || table[0];
+
+  return {
+    id: `backup-encounter-${Date.now()}`,
+    rolledAt: new Date().toISOString(),
+    roll,
+    terrainId,
+    terrainLabel: routeAnalysis.currentHex.terrainLabel,
+    dayPart,
+    ...entry,
+  };
+}
+
 export function generateJungleTravelEvent(travelState, chultMap = {}) {
   const routeAnalysis = buildChultRouteAnalysis(chultMap, travelState);
   const dc = travelState.autoRouteDc === false ? numeric(travelState.dc) || routeAnalysis.suggestedDc : routeAnalysis.suggestedDc;
@@ -419,7 +661,8 @@ export function generateJungleTravelEvent(travelState, chultMap = {}) {
   const pressureRole = weakRoles[0] || [...scoredRoles].sort((a, b) => a.total - b.total)[0];
   const spotlightRole = strongRoles[0] || [...scoredRoles].sort((a, b) => b.total - a.total)[0];
   const seed = Math.floor(Math.random() * 900000) + 100000;
-  const progressGain = progressForOutcome(outcome, scoredRoles, routeAnalysis.pace);
+  const isLost = Boolean(travelState.lostStatus?.active);
+  const progressGain = isLost ? 0 : progressForOutcome(outcome, scoredRoles, routeAnalysis.pace);
   const nextRouteIndex = clampNumber(
     routeAnalysis.routeProgressHexIndex + progressGain,
     0,
@@ -427,9 +670,13 @@ export function generateJungleTravelEvent(travelState, chultMap = {}) {
   );
   const supplyCost = supplyCostForOutcome(outcome, scoredRoles, routeAnalysis.currentHex, routeAnalysis.pace);
   const suppliesAfter = Math.max(0, numeric(travelState.supplies) - supplyCost);
+  const resourceImpact = buildTravelResourceForecast(travelState, routeAnalysis, scoredRoles);
   const discoveredHexes = routeAnalysis.routeHexes.slice(0, nextRouteIndex + 1);
   const arrived = nextRouteIndex >= routeAnalysis.routeHexes.length - 1;
   const contextLine = `${routeAnalysis.currentHex.terrainLabel}: ${routeAnalysis.currentHex.descriptors.slice(0, 3).join(", ")}.`;
+  const lostLine = isLost
+    ? ` Lost: de party is van koers; progress wordt niet toegepast tot de route hersteld is. Drift richting ${travelState.lostStatus?.driftHex || "onbekende hex"}.`
+    : "";
 
   return {
     id: `travel-${Date.now()}`,
@@ -447,7 +694,7 @@ export function generateJungleTravelEvent(travelState, chultMap = {}) {
     readAloud: `${contextLine} ${event.playerSafe}`,
     playerSafe: `${contextLine} ${event.playerSafe}`,
     dmOnly: `${event.dmOnly} Routecontext: ${routeAnalysis.currentHex.dmNotes || routeAnalysis.currentHex.hazards.join(", ")}.`,
-    mechanics: `${event.mechanics} Progress: +${progressGain} route hex(es). Supplies -${supplyCost}. ${arrived ? "Doel bereikt of binnen zicht." : "Expeditie beweegt door."}`,
+    mechanics: `${event.mechanics} Progress: +${progressGain} route hex(es). Supplies -${supplyCost}. Resources: ${resourceImpact.summary}${lostLine} ${arrived ? "Doel bereikt of binnen zicht." : "Expeditie beweegt door."}`,
     clue: event.clue,
     pressureRole: pressureRole ? `${pressureRole.label}: ${pressureRole.character || "onbekend"} (${pressureRole.total})` : "",
     spotlightRole: spotlightRole ? `${spotlightRole.label}: ${spotlightRole.character || "onbekend"} (${spotlightRole.total})` : "",
@@ -457,6 +704,8 @@ export function generateJungleTravelEvent(travelState, chultMap = {}) {
       nextRouteIndex,
       supplyCost,
       suppliesAfter,
+      resourceImpact,
+      lost: isLost ? travelState.lostStatus : null,
       arrived,
       discoveredHexes,
       remainingDays: routeAnalysis.remainingDays,
@@ -478,6 +727,7 @@ export function generateJungleTravelEvent(travelState, chultMap = {}) {
       routeProgressHexIndex: nextRouteIndex,
       routeProgress: nextRouteIndex,
       supplies: suppliesAfter,
+      resources: resourceImpact.after,
     },
     mapPrompt: buildMapPrompt({ event, currentHex: routeAnalysis.currentHex, routeAnalysis, travelState, seed }),
   };

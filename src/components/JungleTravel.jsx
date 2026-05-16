@@ -1,22 +1,35 @@
 import { useMemo, useState } from "react";
 import {
+  AlertTriangle,
+  Bug,
   CheckCircle2,
+  Compass,
   Copy,
   Dice5,
+  Dices,
+  Droplets,
   Download,
   Eye,
   MapPinned,
+  PackageCheck,
   Route,
   RotateCcw,
   Sparkles,
   Swords,
+  Trash2,
 } from "lucide-react";
 import {
+  TRAVEL_DAY_PARTS,
   TRAVEL_PACE_OPTIONS,
   TRAVEL_ROLE_LABELS,
   TRAVEL_TERRAIN_CONDITIONS,
+  TOA_DISEASE_REFERENCES,
+  TOA_TRANSPORT_MODES,
+  TOA_WILDERNESS_COLUMNS,
+  TOA_WILDERNESS_ENCOUNTERS,
 } from "../data/systems/travelSystem.js";
-import { buildChultRouteAnalysis } from "../utils/jungleTravelEngine.js";
+import { getToaEncounterDetail } from "../data/systems/toaEncounterDetails.js";
+import { buildChultRouteAnalysis, buildToaMovementForecast, buildTravelResourceForecast } from "../utils/jungleTravelEngine.js";
 import { CommandModeSwitch, CommandTabs } from "./v2/CommandPrimitives.jsx";
 import { StatusPill, V2Panel } from "./v2/TabletopPrimitives.jsx";
 
@@ -108,6 +121,10 @@ export function JungleTravel({
   onRollRole,
   onGenerateEvent,
   onUndoLastTravelEvent,
+  onDeleteTravelEvent,
+  onRollLostCheck,
+  onClearLostStatus,
+  onRollBackupEncounter,
   onSendEventToRuntime,
   onPublishEventToPlayers,
   onSeedInitiative,
@@ -130,6 +147,23 @@ export function JungleTravel({
   const successfulRoles = completedRoles.filter((role) => totalForRole(role) >= effectiveDc).length;
   const forecast = describeOutcomeForecast(successfulRoles, travel.roles.length, missingRoles);
   const routeStages = routeWindow(routeAnalysis.hexes, routeAnalysis.routeProgressHexIndex);
+  const resourceForecast = useMemo(() => buildTravelResourceForecast(travel, routeAnalysis), [travel, routeAnalysis]);
+  const movementForecast = useMemo(() => buildToaMovementForecast(travel, routeAnalysis), [travel, routeAnalysis]);
+  const resources = resourceForecast.before;
+  const lostStatus = travel.lostStatus;
+  const selectedToaColumn = travel.backupEncounter?.tableColumn || "jungleNoUndead";
+  const selectedToaRows = TOA_WILDERNESS_ENCOUNTERS
+    .filter((entry) => entry[selectedToaColumn])
+    .map((entry) => ({ ...entry, range: entry[selectedToaColumn], detail: getToaEncounterDetail(entry.name) }));
+  const lastBackupEncounter = travel.backupEncounter?.lastRoll;
+
+  function patchResources(patch) {
+    onPatchTravel({ resources: { ...resources, ...patch } });
+  }
+
+  function patchBackupEncounter(patch) {
+    onPatchTravel({ backupEncounter: { ...(travel.backupEncounter || {}), ...patch } });
+  }
 
   function renderEventDetail() {
     if (!lastEvent) return null;
@@ -186,6 +220,39 @@ export function JungleTravel({
           <span>Role pressure</span>
           <p>{lastEvent.pressureRole}</p>
         </article>
+      </div>
+    );
+  }
+
+  function renderToaDetail(detail) {
+    if (!detail) return null;
+
+    return (
+      <div className="toa-encounter-detail">
+        {detail.text?.length ? (
+          <div className="toa-encounter-detail__text">
+            {detail.text.map((line) => (
+              <p key={line}>{line}</p>
+            ))}
+          </div>
+        ) : null}
+        {detail.subtables?.length ? (
+          <div className="toa-encounter-subtables">
+            {detail.subtables.map((subtable) => (
+              <details key={subtable.title}>
+                <summary>{subtable.title}</summary>
+                <div>
+                  {subtable.rows.map((row) => (
+                    <article key={`${subtable.title}-${row.roll}`}>
+                      <span>{row.roll}</span>
+                      <p>{row.text}</p>
+                    </article>
+                  ))}
+                </div>
+              </details>
+            ))}
+          </div>
+        ) : null}
       </div>
     );
   }
@@ -251,6 +318,11 @@ export function JungleTravel({
                   <strong>{routeAnalysis.kilometers} km</strong>
                   <small>{routeAnalysis.miles} miles</small>
                 </article>
+                <article>
+                  <span>RAW ToA</span>
+                  <strong>{movementForecast.baseHexes} hex</strong>
+                  <small>{movementForecast.label}</small>
+                </article>
               </div>
             </div>
 
@@ -279,6 +351,12 @@ export function JungleTravel({
               <label>
                 <span>Supplies</span>
                 <input type="number" min="0" value={travel.supplies} onChange={(event) => onPatchTravel({ supplies: event.target.value })} />
+              </label>
+              <label>
+                <span>Travel method</span>
+                <select value={travel.transportMode || "foot"} onChange={(event) => onPatchTravel({ transportMode: event.target.value })}>
+                  {TOA_TRANSPORT_MODES.map((mode) => <option key={mode.id} value={mode.id}>{mode.label}</option>)}
+                </select>
               </label>
               <label>
                 <span>Next terrain</span>
@@ -391,6 +469,13 @@ export function JungleTravel({
                         <span>Supplies</span>
                         <strong>-{lastEvent.routeImpact?.supplyCost ?? 0}</strong>
                       </article>
+                      <article>
+                        <Droplets size={15} />
+                        <span>Water / food</span>
+                        <strong>
+                          -{lastEvent.routeImpact?.resourceImpact?.waterUsed ?? 0} / -{lastEvent.routeImpact?.resourceImpact?.rationsUsed ?? 0}
+                        </strong>
+                      </article>
                     </div>
 
                     <CommandTabs tabs={detailTabs} value={eventTab} onChange={setEventTab} />
@@ -408,6 +493,9 @@ export function JungleTravel({
                       </button>
                       <button className="button button--ghost" type="button" onClick={onUndoLastTravelEvent}>
                         <RotateCcw size={16} /> Undo
+                      </button>
+                      <button className="button button--ghost" type="button" onClick={() => onDeleteTravelEvent?.(lastEvent.id)}>
+                        <Trash2 size={16} /> Verwijder
                       </button>
                     </div>
                   </article>
@@ -432,12 +520,216 @@ export function JungleTravel({
             </aside>
           </div>
 
+          <div className="travel-systems-grid">
+            <V2Panel
+              title="Lost Mechanic"
+              eyebrow="Navigation drift"
+              action={<StatusPill tone={lostStatus?.active ? "danger" : lostStatus ? "safe" : "warning"}>{lostStatus?.active ? "Verdwaald" : lostStatus ? "Op koers" : "Niet gecheckt"}</StatusPill>}
+            >
+              <div className="travel-system-card">
+                <div className="travel-system-card__lead">
+                  <Compass size={22} />
+                  <div>
+                  <strong>{lostStatus?.message || "Check of de guide de route vasthoudt."}</strong>
+                  <span>RAW ToA: coast/lake DC 10, jungle/river/mountain/swamp DC 15. Pace modifier: {movementForecast.navigationModifier >= 0 ? "+" : ""}{movementForecast.navigationModifier}.</span>
+                  </div>
+                </div>
+                {lostStatus ? (
+                  <div className="travel-mini-metrics">
+                    <article>
+                      <span>Navigator</span>
+                      <strong>{lostStatus.navigator}</strong>
+                    </article>
+                    <article>
+                      <span>Total / DC</span>
+                      <strong>{lostStatus.total} / {lostStatus.dc}</strong>
+                    </article>
+                    <article>
+                      <span>Pace mod</span>
+                      <strong>{lostStatus.paceModifier >= 0 ? "+" : ""}{lostStatus.paceModifier}</strong>
+                    </article>
+                    <article>
+                      <span>Intended</span>
+                      <strong>{lostStatus.intendedHex}</strong>
+                    </article>
+                    <article>
+                      <span>Drift</span>
+                      <strong>{lostStatus.active ? `${lostStatus.driftHex} ${lostStatus.driftDirection}` : "-"}</strong>
+                    </article>
+                  </div>
+                ) : null}
+                <div className="travel-tool-actions">
+                  <button className="button button--ghost" type="button" onClick={onRollLostCheck}>
+                    <Dices size={16} /> Check lost
+                  </button>
+                  <button className="button button--ghost" type="button" onClick={onClearLostStatus}>
+                    <CheckCircle2 size={16} /> Terug op route
+                  </button>
+                </div>
+              </div>
+            </V2Panel>
+
+            <V2Panel
+              title="Resources"
+              eyebrow="Water, rations, repellent"
+              action={<StatusPill tone={resourceForecast.warnings.length ? "danger" : "safe"}>{resourceForecast.warnings.length ? "Pressure" : "Ok"}</StatusPill>}
+            >
+              <div className="travel-system-card">
+                <div className="travel-resource-grid">
+                  <label>
+                    <span>Party</span>
+                    <input type="number" min="1" value={resources.partySize} onChange={(event) => patchResources({ partySize: event.target.value })} />
+                  </label>
+                  <label>
+                    <span>Water</span>
+                    <input type="number" min="0" value={resources.water} onChange={(event) => patchResources({ water: event.target.value })} />
+                  </label>
+                  <label>
+                    <span>Rations</span>
+                    <input type="number" min="0" value={resources.rations} onChange={(event) => patchResources({ rations: event.target.value })} />
+                  </label>
+                  <label>
+                    <span>Repellent</span>
+                    <input type="number" min="0" value={resources.insectRepellent} onChange={(event) => patchResources({ insectRepellent: event.target.value })} />
+                  </label>
+                  <label>
+                    <span>Raincatchers</span>
+                    <input type="number" min="0" value={resources.raincatchers} onChange={(event) => patchResources({ raincatchers: event.target.value })} />
+                  </label>
+                  <label className="travel-resource-check">
+                    <input
+                      type="checkbox"
+                      checked={resources.useInsectRepellent}
+                      onChange={(event) => patchResources({ useInsectRepellent: event.target.checked })}
+                    />
+                    <span>Gebruik repellent</span>
+                  </label>
+                </div>
+                <div className="travel-resource-forecast">
+                  <article>
+                    <Droplets size={15} />
+                    <span>Water vandaag</span>
+                    <strong>-{resourceForecast.waterUsed}</strong>
+                  </article>
+                  <article>
+                    <PackageCheck size={15} />
+                    <span>Rations vandaag</span>
+                    <strong>-{resourceForecast.rationsUsed}</strong>
+                  </article>
+                  <article>
+                    <Bug size={15} />
+                    <span>Repellent</span>
+                    <strong>-{resourceForecast.repellentUsed}</strong>
+                  </article>
+                </div>
+                {resourceForecast.warnings.length ? (
+                  <div className="travel-warning-list">
+                    {resourceForecast.warnings.map((warning) => (
+                      <span key={warning}><AlertTriangle size={14} /> {warning}</span>
+                    ))}
+                  </div>
+                ) : null}
+                <details className="travel-disease-reference">
+                  <summary>Dehydration & diseases</summary>
+                  <div>
+                    <article>
+                      <span>Dehydration</span>
+                      <strong>DC 15 Con save</strong>
+                      <small>2 gallons vers water per character per dag. Fast pace geeft -5 op de save.</small>
+                    </article>
+                    {TOA_DISEASE_REFERENCES.map((disease) => (
+                      <article key={disease.id}>
+                        <span>{disease.label}</span>
+                        <strong>DC {disease.dc}</strong>
+                        <small>{disease.tableUse}</small>
+                      </article>
+                    ))}
+                  </div>
+                </details>
+              </div>
+            </V2Panel>
+
+            <V2Panel title="ToA Encounter Check" eyebrow="Ochtend / middag / nacht">
+              <div className="travel-system-card">
+                <div className="travel-encounter-controls">
+                  <label>
+                    <span>Table column</span>
+                    <select value={selectedToaColumn} onChange={(event) => patchBackupEncounter({ tableMode: "toa", tableColumn: event.target.value })}>
+                      {TOA_WILDERNESS_COLUMNS.map((column) => (
+                        <option key={column.id} value={column.id}>{column.label}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    <span>Dagdeel</span>
+                    <select value={travel.backupEncounter?.dayPart || TRAVEL_DAY_PARTS[0]} onChange={(event) => patchBackupEncounter({ dayPart: event.target.value })}>
+                      {TRAVEL_DAY_PARTS.map((dayPart) => <option key={dayPart}>{dayPart}</option>)}
+                    </select>
+                  </label>
+                  <label>
+                    <span>Encounter bij</span>
+                    <input
+                      type="number"
+                      min="1"
+                      max="20"
+                      value={travel.backupEncounter?.threshold || 16}
+                      onChange={(event) => patchBackupEncounter({ threshold: event.target.value })}
+                    />
+                  </label>
+                  <button className="button button--ghost" type="button" onClick={onRollBackupEncounter}>
+                    <Dices size={16} /> Check encounter
+                  </button>
+                </div>
+                {lastBackupEncounter ? (
+                  <article className={`travel-backup-result ${lastBackupEncounter.occurs === false ? "travel-backup-result--quiet" : ""}`}>
+                    <span>
+                      d20 {lastBackupEncounter.encounterCheck ?? "-"} / d100 {lastBackupEncounter.occurs === false ? "-" : lastBackupEncounter.roll} / {lastBackupEncounter.dayPart}
+                    </span>
+                    <strong>{lastBackupEncounter.occurs === false ? "Geen encounter" : lastBackupEncounter.title}</strong>
+                    <p>{lastBackupEncounter.pressure}</p>
+                    <small>{lastBackupEncounter.setup}</small>
+                    {lastBackupEncounter.occurs === false ? null : renderToaDetail(lastBackupEncounter.detail)}
+                  </article>
+                ) : (
+                  <p className="empty-state">RAW: roll d20 drie keer per dag. Bij 16+ roll d100 op de juiste wilderness column.</p>
+                )}
+                <details className="travel-encounter-table">
+                  <summary>Bekijk table</summary>
+                  <div>
+                    {selectedToaRows.map((entry) => (
+                      <article key={`${entry.range}-${entry.name}`}>
+                        <span>{entry.range}</span>
+                        <strong>{entry.name}</strong>
+                        <small>{entry.detail?.preview || "ToA d100"}</small>
+                        {entry.detail ? (
+                          <details className="toa-inline-detail">
+                            <summary>Encounter tekst</summary>
+                            {renderToaDetail(entry.detail)}
+                          </details>
+                        ) : null}
+                      </article>
+                    ))}
+                  </div>
+                </details>
+              </div>
+            </V2Panel>
+          </div>
+
           <V2Panel title="Travel Log" eyebrow="Compacte geschiedenis">
             <div className="travel-history-timeline">
               {travel.history?.length ? (
                 travel.history.slice(0, 8).map((event) => (
                   <article key={event.id} className={`travel-history-chip travel-history-chip--${event.outcome}`}>
-                    <StatusPill tone={toneForOutcome(event.outcome)}>{event.outcome}</StatusPill>
+                    <div className="travel-history-chip__head">
+                      <StatusPill tone={toneForOutcome(event.outcome)}>{event.outcome}</StatusPill>
+                      <button
+                        type="button"
+                        aria-label={`Verwijder travel event ${event.title}`}
+                        onClick={() => onDeleteTravelEvent?.(event.id)}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
                     <strong>Dag {event.day}: {event.title}</strong>
                     <span>{event.currentHex} / {event.currentTerrain}</span>
                   </article>

@@ -1,6 +1,6 @@
 import { campaign, encounters, scenes } from "./campaignData.js";
 import { createDefaultChultMapState, normalizeChultMapState } from "./systems/chultHexSystem.js";
-import { defaultTravelOverlays, defaultTravelRoles } from "./systems/travelSystem.js";
+import { TRAVEL_DAY_PARTS, defaultTravelOverlays, defaultTravelResources, defaultTravelRoles } from "./systems/travelSystem.js";
 
 export const WORKSPACE_VERSION = 1;
 
@@ -25,6 +25,41 @@ Text: Een gebroken kraal met hetzelfde patroon als Azaka's familie-masker.`;
 
 function uniqueStrings(values) {
   return Array.from(new Set((Array.isArray(values) ? values : []).map(String).filter(Boolean)));
+}
+
+function clampPositiveNumber(value, fallback = 0) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.max(0, number) : fallback;
+}
+
+function normalizeTravelResources(resources = {}, defaults = defaultTravelResources(campaign.party)) {
+  const source = resources && typeof resources === "object" ? resources : {};
+  return {
+    ...defaults,
+    ...source,
+    partySize: Math.max(1, Number(source.partySize ?? defaults.partySize) || defaults.partySize),
+    water: clampPositiveNumber(source.water, defaults.water),
+    rations: clampPositiveNumber(source.rations, defaults.rations),
+    insectRepellent: clampPositiveNumber(source.insectRepellent, defaults.insectRepellent),
+    raincatchers: clampPositiveNumber(source.raincatchers, defaults.raincatchers),
+    waterPerPerson: clampPositiveNumber(source.waterPerPerson, defaults.waterPerPerson),
+    rationsPerPerson: clampPositiveNumber(source.rationsPerPerson, defaults.rationsPerPerson),
+    useInsectRepellent: source.useInsectRepellent !== false,
+  };
+}
+
+function normalizeTravelBackupEncounter(backupEncounter = {}, defaults = {}) {
+  const source = backupEncounter && typeof backupEncounter === "object" ? backupEncounter : {};
+  return {
+    ...defaults,
+    ...source,
+    tableMode: source.tableMode === "campaign" ? "campaign" : "toa",
+    tableColumn: source.tableColumn || defaults.tableColumn || "jungleNoUndead",
+    terrainId: source.terrainId || defaults.terrainId || "jungle",
+    dayPart: TRAVEL_DAY_PARTS.includes(source.dayPart) ? source.dayPart : defaults.dayPart || TRAVEL_DAY_PARTS[0],
+    threshold: Math.min(20, Math.max(1, Number(source.threshold ?? defaults.threshold ?? 16))),
+    lastRoll: source.lastRoll && typeof source.lastRoll === "object" ? source.lastRoll : null,
+  };
 }
 
 function monsterWithDefaults(monster) {
@@ -292,10 +327,21 @@ function createDefaultTravel() {
     day: 1,
     pace: "Normaal",
     weather: "Warme regen, zware lucht, sterrenloze nacht op komst",
+    transportMode: "foot",
     dc: 15,
     routeProgress: 2,
     routeProgressHexIndex: 2,
     supplies: 8,
+    resources: defaultTravelResources(campaign.party),
+    lostStatus: null,
+    backupEncounter: {
+      tableMode: "toa",
+      tableColumn: "jungleNoUndead",
+      terrainId: "denseJungle",
+      dayPart: TRAVEL_DAY_PARTS[0],
+      threshold: 16,
+      lastRoll: null,
+    },
     autoRouteDc: true,
     includeDmInPrompts: true,
     promptElements:
@@ -431,9 +477,13 @@ export function normalizeWorkspaceState(value = {}) {
       ...travel,
       day: Math.max(1, Number(travel.day || defaults.travel.day)),
       dc: Math.max(5, Number(travel.dc || defaults.travel.dc)),
+      transportMode: ["foot", "canoe", "flying30"].includes(travel.transportMode) ? travel.transportMode : defaults.travel.transportMode,
       routeProgress: Math.max(0, Number(travel.routeProgress ?? defaults.travel.routeProgress)),
       routeProgressHexIndex: Math.max(0, Number(travel.routeProgressHexIndex ?? travel.routeProgress ?? defaults.travel.routeProgressHexIndex)),
       supplies: Math.max(0, Number(travel.supplies ?? defaults.travel.supplies)),
+      resources: normalizeTravelResources(travel.resources, defaults.travel.resources),
+      lostStatus: travel.lostStatus && typeof travel.lostStatus === "object" ? travel.lostStatus : null,
+      backupEncounter: normalizeTravelBackupEncounter(travel.backupEncounter, defaults.travel.backupEncounter),
       autoRouteDc: travel.autoRouteDc !== false,
       includeDmInPrompts: travel.includeDmInPrompts !== false,
       promptElements: travel.promptElements ?? defaults.travel.promptElements,

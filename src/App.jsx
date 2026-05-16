@@ -27,7 +27,13 @@ import { encounters, scenes as seedScenes } from "./data/campaignData.js";
 import { createDefaultHexNote } from "./data/systems/chultHexSystem.js";
 import { normalizeWorkspaceState } from "./data/workspaceState.js";
 import { analyzePrepQuality, buildRepairPrompt, parsePrepOutput } from "./utils/aiPrepParser.js";
-import { buildChultRouteAnalysis, buildTravelInitiativeSeed, generateJungleTravelEvent } from "./utils/jungleTravelEngine.js";
+import {
+  buildChultRouteAnalysis,
+  buildTravelInitiativeSeed,
+  generateJungleTravelEvent,
+  rollTravelBackupEncounter,
+  rollTravelLostCheck,
+} from "./utils/jungleTravelEngine.js";
 import { createParticipantFromMonster } from "./utils/monsterStatblocks.js";
 import { fetchDndBeyondCharacter, parsePartyImport } from "./utils/partyImportParser.js";
 import { useDebouncedSave } from "./utils/useDebouncedSave.js";
@@ -278,12 +284,59 @@ function App() {
           routeProgress: previousRouteIndex,
           routeProgressHexIndex: previousRouteIndex,
           supplies: previousSupplies,
+          resources: event.routeImpact?.resourceImpact?.before || current.travel.resources,
           lastEvent: nextHistory[0] || null,
           history: nextHistory,
         },
         chultMap: {
           ...current.chultMap,
           selectedHex: event.currentHex || current.chultMap.selectedHex,
+        },
+      };
+    });
+  }
+
+  function deleteTravelEvent(eventId) {
+    persist((current) => {
+      const nextHistory = (current.travel.history || []).filter((event) => event.id !== eventId);
+      return {
+        ...current,
+        travel: {
+          ...current.travel,
+          history: nextHistory,
+          lastEvent: current.travel.lastEvent?.id === eventId ? nextHistory[0] || null : current.travel.lastEvent,
+        },
+      };
+    });
+  }
+
+  function rollLostCheckForTravel() {
+    persist((current) => ({
+      ...current,
+      travel: {
+        ...current.travel,
+        lostStatus: rollTravelLostCheck(current.travel, current.chultMap),
+      },
+    }));
+  }
+
+  function clearTravelLostStatus() {
+    patchTravel({ lostStatus: null });
+  }
+
+  function rollBackupTravelEncounter() {
+    persist((current) => {
+      const roll = rollTravelBackupEncounter(current.travel, current.chultMap);
+      return {
+        ...current,
+        travel: {
+          ...current.travel,
+          backupEncounter: {
+            ...(current.travel.backupEncounter || {}),
+            terrainId: roll.terrainId,
+            dayPart: roll.dayPart,
+            lastRoll: roll,
+          },
         },
       };
     });
@@ -1055,6 +1108,10 @@ function App() {
         onRollRole={rollTravelRole}
         onGenerateEvent={generateTravelEvent}
         onUndoLastTravelEvent={undoLastTravelEvent}
+        onDeleteTravelEvent={deleteTravelEvent}
+        onRollLostCheck={rollLostCheckForTravel}
+        onClearLostStatus={clearTravelLostStatus}
+        onRollBackupEncounter={rollBackupTravelEncounter}
         onSendEventToRuntime={sendLastTravelEventToRuntime}
         onPublishEventToPlayers={publishLastTravelEventToPlayers}
         onSeedInitiative={seedInitiativeFromLastTravelEvent}

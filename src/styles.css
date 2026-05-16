@@ -8100,7 +8100,7 @@ select {
 
 .travel-route-metrics {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 0.55rem;
 }
 
@@ -8374,7 +8374,7 @@ select {
 
 .travel-impact-row {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0.5rem;
 }
 
@@ -8418,6 +8418,274 @@ select {
   display: flex;
   flex-wrap: wrap;
   gap: 0.45rem;
+}
+
+.travel-systems-grid {
+  display: grid;
+  grid-template-columns: minmax(20rem, 0.85fr) minmax(24rem, 1fr) minmax(22rem, 0.95fr);
+  gap: 0.9rem;
+  align-items: start;
+}
+
+.travel-system-card {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.85rem;
+}
+
+.travel-system-card__lead {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.65rem;
+  align-items: start;
+}
+
+.travel-system-card__lead svg {
+  margin-top: 0.15rem;
+  color: var(--brass);
+}
+
+.travel-system-card__lead strong,
+.travel-backup-result strong,
+.travel-encounter-table strong,
+.travel-mini-metrics strong,
+.travel-resource-forecast strong {
+  display: block;
+  color: var(--text);
+  font-family: Georgia, serif;
+}
+
+.travel-system-card__lead span,
+.travel-mini-metrics span,
+.travel-resource-grid span,
+.travel-encounter-controls span,
+.travel-resource-forecast span,
+.travel-backup-result span,
+.travel-encounter-table span,
+.travel-encounter-table small {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.travel-mini-metrics,
+.travel-resource-forecast {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+
+.travel-mini-metrics article,
+.travel-resource-forecast article,
+.travel-backup-result,
+.travel-encounter-table article {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.65rem;
+  border: 1px solid rgba(64, 87, 90, 0.16);
+  border-radius: var(--radius-control);
+  background: rgba(255, 250, 239, 0.48);
+}
+
+.travel-resource-forecast {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.travel-resource-grid,
+.travel-encounter-controls {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.travel-resource-grid label,
+.travel-encounter-controls label {
+  display: grid;
+  gap: 0.28rem;
+}
+
+.travel-resource-check {
+  align-items: center;
+  grid-template-columns: auto minmax(0, 1fr);
+  min-height: 2.55rem;
+  padding: 0.5rem 0.55rem;
+  border: 1px solid rgba(64, 87, 90, 0.16);
+  border-radius: var(--radius-control);
+  background: rgba(255, 250, 239, 0.42);
+}
+
+.travel-resource-check input {
+  width: auto;
+}
+
+.travel-tool-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.travel-warning-list {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.travel-warning-list span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--blood);
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.travel-backup-result p,
+.travel-backup-result small {
+  margin: 0;
+  color: var(--text);
+  line-height: 1.4;
+}
+
+.travel-backup-result small {
+  color: var(--muted);
+}
+
+.toa-encounter-detail {
+  display: grid;
+  gap: 0.65rem;
+  padding-top: 0.25rem;
+}
+
+.toa-encounter-detail__text {
+  display: grid;
+  gap: 0.45rem;
+  max-height: 18rem;
+  overflow: auto;
+  padding: 0.7rem;
+  border: 1px solid rgba(64, 87, 90, 0.14);
+  border-radius: var(--radius-control);
+  background: rgba(255, 250, 239, 0.46);
+}
+
+.toa-encounter-detail__text p,
+.toa-encounter-subtables p {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.86rem;
+  line-height: 1.48;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 650;
+}
+
+.toa-encounter-subtables {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.toa-encounter-subtables details,
+.toa-inline-detail {
+  border: 1px solid rgba(64, 87, 90, 0.14);
+  border-radius: var(--radius-control);
+  background: rgba(255, 250, 239, 0.34);
+}
+
+.toa-encounter-subtables summary,
+.toa-inline-detail summary {
+  cursor: pointer;
+  padding: 0.58rem 0.65rem;
+  color: var(--text);
+  font-size: 0.72rem;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.toa-encounter-subtables details > div {
+  display: grid;
+  gap: 0.35rem;
+  max-height: 16rem;
+  overflow: auto;
+  padding: 0 0.55rem 0.55rem;
+}
+
+.toa-encounter-subtables article {
+  display: grid;
+  grid-template-columns: 3.4rem minmax(0, 1fr);
+  gap: 0.55rem;
+  align-items: start;
+  padding: 0.48rem;
+  border: 1px solid rgba(64, 87, 90, 0.12);
+  border-radius: 0.5rem;
+  background: rgba(255, 250, 239, 0.42);
+}
+
+.toa-encounter-subtables span {
+  color: var(--brass);
+  font-size: 0.72rem;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.toa-inline-detail {
+  margin-top: 0.35rem;
+}
+
+.toa-inline-detail .toa-encounter-detail {
+  padding: 0 0.55rem 0.55rem;
+}
+
+.travel-encounter-table,
+.travel-disease-reference {
+  border: 1px solid rgba(64, 87, 90, 0.16);
+  border-radius: var(--radius-control);
+  background: rgba(255, 250, 239, 0.38);
+}
+
+.travel-encounter-table summary,
+.travel-disease-reference summary {
+  cursor: pointer;
+  padding: 0.75rem;
+  color: var(--text);
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.travel-encounter-table > div,
+.travel-disease-reference > div {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0 0.75rem 0.75rem;
+}
+
+.travel-disease-reference article {
+  display: grid;
+  gap: 0.22rem;
+  padding: 0.6rem;
+  border: 1px solid rgba(64, 87, 90, 0.14);
+  border-radius: var(--radius-control);
+  background: rgba(255, 250, 239, 0.42);
+}
+
+.travel-disease-reference span {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.travel-disease-reference strong {
+  color: var(--text);
+  font-family: Georgia, serif;
+}
+
+.travel-disease-reference small {
+  color: var(--muted);
+  line-height: 1.35;
 }
 
 .travel-empty-outcome {
@@ -8477,6 +8745,30 @@ select {
 
 .travel-history-chip--bad {
   border-color: rgba(185, 58, 50, 0.28);
+}
+
+.travel-history-chip__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem;
+}
+
+.travel-history-chip__head button {
+  display: inline-grid;
+  width: 1.9rem;
+  height: 1.9rem;
+  place-items: center;
+  border: 1px solid rgba(167, 74, 53, 0.26);
+  border-radius: 999px;
+  background: rgba(167, 74, 53, 0.08);
+  color: var(--blood);
+  cursor: pointer;
+}
+
+.travel-history-chip__head button:hover {
+  border-color: rgba(167, 74, 53, 0.5);
+  background: rgba(167, 74, 53, 0.15);
 }
 
 .travel-history-chip strong {
@@ -9698,7 +9990,8 @@ textarea,
 @media (max-width: 1180px) {
   .travel-route-hero,
   .travel-play-grid,
-  .travel-setup-console {
+  .travel-setup-console,
+  .travel-systems-grid {
     grid-template-columns: 1fr;
   }
 
@@ -9724,7 +10017,11 @@ textarea,
   .travel-flow-steps,
   .travel-impact-row,
   .travel-history-timeline,
-  .travel-setup-grid-clean {
+  .travel-setup-grid-clean,
+  .travel-mini-metrics,
+  .travel-resource-grid,
+  .travel-resource-forecast,
+  .travel-encounter-controls {
     grid-template-columns: 1fr;
   }
 

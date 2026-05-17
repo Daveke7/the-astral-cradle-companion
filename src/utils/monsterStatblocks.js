@@ -1,3 +1,5 @@
+import { buildMonsterImagePrompt } from "./monsterImagePrompts.js";
+
 const DND_API_ROOT = "https://www.dnd5eapi.co";
 const DND_API_2014 = `${DND_API_ROOT}/api/2014`;
 
@@ -117,6 +119,7 @@ export function normalizeApiMonster(monster = {}) {
     actions: (monster.actions || []).map(normalizeAction),
     reactions: (monster.reactions || []).map(normalizeAction),
     legendaryActions: (monster.legendary_actions || []).map(normalizeAction),
+    imagePrompt: monster.imagePrompt || monster.image_prompt || null,
   };
 }
 
@@ -146,17 +149,84 @@ export async function fetchSrdMonsterDetail(monster) {
 
 export function monsterSearchText(monster) {
   return [
+    monsterSearchPrimaryText(monster),
+    monster.rawText,
+    monster.damageVulnerabilities,
+    monster.damageResistances,
+    monster.damageImmunities,
+    monster.conditionImmunities,
+    ...(monster.traits || []).flatMap((entry) => [entry.name, entry.desc]),
+    ...(monster.actions || []).flatMap((entry) => [entry.name, entry.desc]),
+    ...(monster.reactions || []).flatMap((entry) => [entry.name, entry.desc]),
+    ...(monster.legendaryActions || []).flatMap((entry) => [entry.name, entry.desc]),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
+export function monsterSearchPrimaryText(monster) {
+  return [
     monster.name,
+    monster.index,
     monster.type,
     monster.role,
     monster.source,
+    monster.sourceType,
+    monster.sourceUrl,
     monster.cr,
+    monster.alignment,
+    monster.senses,
+    monster.languages,
+    ...(monster.aliases || []),
     ...(monster.tags || []),
     ...(monster.environment || []),
   ]
     .filter(Boolean)
     .join(" ")
     .toLowerCase();
+}
+
+function normalizeSearchValue(value = "") {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function monsterMatchesSearch(monster, query = "") {
+  const needle = normalizeSearchValue(query);
+  if (!needle) return true;
+  const primaryHaystack = normalizeSearchValue(monsterSearchPrimaryText(monster));
+  if (primaryHaystack.includes(needle)) return true;
+  if (needle.length <= 3) return needle.split(" ").every((token) => primaryHaystack.includes(token));
+  const haystack = normalizeSearchValue(monsterSearchText(monster));
+  if (haystack.includes(needle)) return true;
+  return needle.split(" ").every((token) => haystack.includes(token));
+}
+
+export function monsterSearchRank(monster, query = "") {
+  const needle = normalizeSearchValue(query);
+  if (!needle) return 10;
+  const name = normalizeSearchValue(monster.name);
+  const aliases = (monster.aliases || []).map(normalizeSearchValue);
+  const primaryHaystack = normalizeSearchValue(monsterSearchPrimaryText(monster));
+  const fullHaystack = normalizeSearchValue(monsterSearchText(monster));
+  const tokens = needle.split(" ").filter(Boolean);
+
+  if (name === needle) return 0;
+  if (aliases.some((alias) => alias === needle)) return 1;
+  if (name.startsWith(needle)) return 2;
+  if (aliases.some((alias) => alias.startsWith(needle))) return 3;
+  if (name.includes(needle)) return 4;
+  if (tokens.every((token) => name.includes(token))) return 5;
+  if (primaryHaystack.includes(needle)) return 6;
+  if (tokens.every((token) => primaryHaystack.includes(token))) return 7;
+  if (fullHaystack.includes(needle)) return 9;
+  return 12;
 }
 
 export function createParticipantFromMonster(monster, instance = 1) {
@@ -177,27 +247,46 @@ export function createParticipantFromMonster(monster, instance = 1) {
     conditions: [],
     concentration: false,
     reactionUsed: false,
-    legendaryActions: Array.isArray(monster.legendaryActions) ? monster.legendaryActions.length : 0,
+    legendaryActionCount: Array.isArray(monster.legendaryActions) ? monster.legendaryActions.length : Number(monster.legendaryActions || 0),
+    legendaryActions: Array.isArray(monster.legendaryActions) ? monster.legendaryActions : [],
     lairAction: false,
     notes: `${monster.size || ""} ${monster.type || ""} - CR ${normalizeCr(monster.cr)} - ${monster.source || ""}`.trim(),
     hiddenFromPlayers: false,
     monsterIndex: monster.index,
     source: monster.source || "",
+    sourceType: monster.sourceType || "",
+    sourceUrl: monster.sourceUrl || "",
+    imageUrl: monster.imageUrl || "",
     cr: normalizeCr(monster.cr),
     xp: Number(monster.xp || 0),
     size: monster.size || "",
     type: monster.type || "",
     alignment: monster.alignment || "",
+    armorClassText: monster.armorClassText || "",
+    hitDice: monster.hitDice || "",
     speed: monster.speed || "",
     abilities,
     saves: monster.saves || {},
     skills: monster.skills || {},
+    savingThrowsText: monster.savingThrowsText || "",
+    skillsText: monster.skillsText || "",
+    damageVulnerabilities: monster.damageVulnerabilities || "",
+    damageResistances: monster.damageResistances || "",
+    damageImmunities: monster.damageImmunities || "",
+    conditionImmunities: monster.conditionImmunities || "",
     senses: monster.senses || "",
     languages: monster.languages || "",
     traits: monster.traits || [],
     actions: monster.actions || [],
+    bonusActions: monster.bonusActions || [],
     reactions: monster.reactions || [],
+    mythicActions: monster.mythicActions || [],
+    lairActions: monster.lairActions || [],
+    regionalEffects: monster.regionalEffects || [],
+    rawText: monster.rawText || "",
     environment: monster.environment || [],
     tags: monster.tags || [],
+    aliases: monster.aliases || [],
+    imagePrompt: monster.imagePrompt || monster.image_prompt || buildMonsterImagePrompt(monster),
   };
 }

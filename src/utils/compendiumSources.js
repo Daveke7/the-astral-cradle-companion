@@ -299,6 +299,7 @@ function normalizePrivateMonster(monster = {}, source = "Private local import") 
     role: monster.role || "Private",
     environment: splitList(monster.environment || monster.environments),
     tags: splitList(monster.tags),
+    aliases: splitList(monster.aliases || monster.alias),
     ac: Number(monster.ac ?? monster.armor_class ?? system.attributes?.ac?.value ?? system.attributes?.ac?.flat ?? 10),
     hp: Number(monster.hp ?? monster.hit_points ?? system.attributes?.hp?.max ?? system.attributes?.hp?.value ?? 1),
     hitDice: monster.hitDice || monster.hit_dice || system.attributes?.hd || "",
@@ -337,6 +338,7 @@ function normalizePrivateMonster(monster = {}, source = "Private local import") 
       damage: action.damage || "",
       desc: stripHtml(action.desc || action.description || ""),
     })),
+    imagePrompt: monster.imagePrompt || monster.image_prompt || monster.visualPrompt || monster.visual_prompt || null,
   };
 }
 

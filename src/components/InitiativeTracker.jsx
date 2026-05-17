@@ -3,9 +3,11 @@ import {
   ArrowDown,
   ArrowUp,
   BookOpen,
+  Copy,
   Dices,
   EyeOff,
   FastForward,
+  Image as ImageIcon,
   Info,
   ListOrdered,
   LoaderCircle,
@@ -18,13 +20,15 @@ import {
   X,
 } from "lucide-react";
 import { fallbackMonsterLibrary } from "../data/systems/monsterLibrary.js";
-import { mergeCompendiumEntries } from "../utils/compendiumStore.js";
+import { buildEnemySearchIndex } from "../utils/enemySearchIndex.js";
 import {
   abilityModifier,
   fetchSrdMonsterDetail,
   fetchSrdMonsterIndex,
-  monsterSearchText,
+  monsterMatchesSearch,
+  monsterSearchRank,
 } from "../utils/monsterStatblocks.js";
+import { buildMonsterImagePrompt, monsterImagePromptJson, monsterImagePromptSummary } from "../utils/monsterImagePrompts.js";
 import { useCompendiumEntries } from "../utils/useCompendiumEntries.js";
 import { CommandModeSwitch } from "./v2/CommandPrimitives.jsx";
 import { EmptyState, Meter, Panel, Tag } from "./ui.jsx";
@@ -112,6 +116,37 @@ function formatMapEntries(value = {}) {
   return entries.map(([key, item]) => `${key} ${item}`).join(", ");
 }
 
+function copyToClipboard(value) {
+  navigator.clipboard?.writeText(String(value || ""));
+}
+
+function renderMonsterImagePrompt(creature, { compact = false } = {}) {
+  if (!creature) return null;
+  const payload = buildMonsterImagePrompt(creature);
+  const json = monsterImagePromptJson(creature);
+
+  return (
+    <section className={compact ? "monster-image-prompt monster-image-prompt--compact" : "monster-image-prompt"}>
+      <header>
+        <div>
+          <ImageIcon size={16} />
+          <span>Image prompt</span>
+        </div>
+        <div className="monster-image-prompt__actions">
+          <button type="button" onClick={() => copyToClipboard(payload.prompt)}>
+            <Copy size={14} /> Prompt
+          </button>
+          <button type="button" onClick={() => copyToClipboard(json)}>
+            <Copy size={14} /> JSON
+          </button>
+        </div>
+      </header>
+      <p>{payload.prompt}</p>
+      {!compact ? <pre>{json}</pre> : <small>{monsterImagePromptSummary(creature)}</small>}
+    </section>
+  );
+}
+
 function renderActionSection(title, actions = [], compact = false) {
   if (!actions?.length) return null;
   return (
@@ -178,8 +213,19 @@ function renderStatBlock(creature, { compact = false, includeActions = true } = 
         <div className="monster-detail-lines">
           <p><strong>Saves</strong><span>{formatMapEntries(creature.saves)}</span></p>
           <p><strong>Skills</strong><span>{formatMapEntries(creature.skills)}</span></p>
+          <p><strong>Damage</strong><span>{[creature.damageVulnerabilities && `Vuln: ${creature.damageVulnerabilities}`, creature.damageResistances && `Res: ${creature.damageResistances}`, creature.damageImmunities && `Imm: ${creature.damageImmunities}`].filter(Boolean).join(" / ") || "-"}</span></p>
+          <p><strong>Conditions</strong><span>{creature.conditionImmunities || "-"}</span></p>
           <p><strong>Senses</strong><span>{creature.senses || "-"}</span></p>
           <p><strong>Languages</strong><span>{creature.languages || "-"}</span></p>
+          <p>
+            <strong>Links</strong>
+            <span>
+              {creature.sourceUrl ? <a href={creature.sourceUrl} target="_blank" rel="noreferrer">source</a> : null}
+              {creature.sourceUrl && creature.imageUrl ? " / " : ""}
+              {creature.imageUrl ? <a href={creature.imageUrl} target="_blank" rel="noreferrer">image ref</a> : null}
+              {!creature.sourceUrl && !creature.imageUrl ? "-" : ""}
+            </span>
+          </p>
         </div>
       ) : null}
 
@@ -197,9 +243,20 @@ function renderStatBlock(creature, { compact = false, includeActions = true } = 
       {includeActions ? (
         <>
           {renderActionSection("Actions", creature.actions, compact)}
+          {renderActionSection("Bonus Actions", creature.bonusActions, compact)}
           {renderActionSection("Reactions", creature.reactions, compact)}
           {renderActionSection("Legendary", creature.legendaryActions, compact)}
+          {renderActionSection("Mythic", creature.mythicActions, compact)}
+          {renderActionSection("Lair", creature.lairActions, compact)}
         </>
+      ) : null}
+
+      {renderMonsterImagePrompt(creature, { compact })}
+      {!compact && creature.rawText ? (
+        <details className="enemy-raw-statblock">
+          <summary>Volledige PDF tekst</summary>
+          <pre>{creature.rawText}</pre>
+        </details>
       ) : null}
     </div>
   );
@@ -217,8 +274,8 @@ export function InitiativeTracker({
   const compendiumMonsters = useCompendiumEntries("monsters");
   const [viewMode, setViewMode] = useState("run");
   const [monsterSearch, setMonsterSearch] = useState("");
-  const [monsterIndex, setMonsterIndex] = useState(() => compendiumMonsters);
-  const [selectedMonster, setSelectedMonster] = useState(() => compendiumMonsters[0] || fallbackMonsterLibrary[0]);
+  const [monsterIndex, setMonsterIndex] = useState(() => buildEnemySearchIndex(compendiumMonsters));
+  const [selectedMonster, setSelectedMonster] = useState(() => buildEnemySearchIndex(compendiumMonsters)[0] || fallbackMonsterLibrary[0]);
   const [monsterCount, setMonsterCount] = useState(1);
   const [monsterLoadState, setMonsterLoadState] = useState("idle");
   const [monsterError, setMonsterError] = useState("");
@@ -232,18 +289,32 @@ export function InitiativeTracker({
   const activeIndex = ordered.length ? Number(initiative.activeIndex || 0) % ordered.length : 0;
   const active = ordered[activeIndex] || null;
   const next = ordered[(activeIndex + 1) % Math.max(ordered.length, 1)] || null;
+  const activeActionOptions = useMemo(
+    () =>
+      active
+        ? [
+            ...(active.actions || []),
+            ...(active.bonusActions || []),
+            ...(active.reactions || []),
+            ...(Array.isArray(active.legendaryActions) ? active.legendaryActions : []),
+          ]
+        : [],
+    [active]
+  );
   const enemyParticipants = useMemo(() => ordered.filter(isEnemyParticipant), [ordered]);
   const monsterResults = useMemo(() => {
-    const query = monsterSearch.trim().toLowerCase();
+    const query = monsterSearch.trim();
     const results = query
-      ? monsterIndex.filter((monster) => monsterSearchText(monster).includes(query))
+      ? monsterIndex
+          .filter((monster) => monsterMatchesSearch(monster, query))
+          .sort((left, right) => monsterSearchRank(left, query) - monsterSearchRank(right, query) || left.name.localeCompare(right.name))
       : monsterIndex;
     return results.slice(0, 36);
   }, [monsterIndex, monsterSearch]);
 
   useEffect(() => {
-    setMonsterIndex((current) => mergeCompendiumEntries(compendiumMonsters, current));
-    setSelectedMonster((current) => current || compendiumMonsters[0] || fallbackMonsterLibrary[0]);
+    setMonsterIndex((current) => buildEnemySearchIndex([...current, ...compendiumMonsters]));
+    setSelectedMonster((current) => current || buildEnemySearchIndex(compendiumMonsters)[0] || fallbackMonsterLibrary[0]);
   }, [compendiumMonsters]);
 
   useEffect(() => {
@@ -254,13 +325,7 @@ export function InitiativeTracker({
       try {
         const onlineMonsters = await fetchSrdMonsterIndex();
         if (cancelled) return;
-        setMonsterIndex((current) => {
-          const byIndex = new Map(current.map((monster) => [monster.index, monster]));
-          onlineMonsters.forEach((monster) => {
-            if (!byIndex.has(monster.index)) byIndex.set(monster.index, monster);
-          });
-          return Array.from(byIndex.values()).sort((left, right) => left.name.localeCompare(right.name));
-        });
+        setMonsterIndex((current) => buildEnemySearchIndex([...current, ...onlineMonsters]));
         setMonsterLoadState("loaded");
       } catch (error) {
         if (cancelled) return;
@@ -363,12 +428,27 @@ export function InitiativeTracker({
           abilities: detail.abilities,
           saves: detail.saves,
           skills: detail.skills,
+          savingThrowsText: detail.savingThrowsText,
+          skillsText: detail.skillsText,
+          damageVulnerabilities: detail.damageVulnerabilities,
+          damageResistances: detail.damageResistances,
+          damageImmunities: detail.damageImmunities,
+          conditionImmunities: detail.conditionImmunities,
+          sourceUrl: detail.sourceUrl,
+          imageUrl: detail.imageUrl,
           senses: detail.senses,
           languages: detail.languages,
           traits: detail.traits,
           actions: detail.actions,
+          bonusActions: detail.bonusActions,
           reactions: detail.reactions,
-          legendaryActions: Array.isArray(detail.legendaryActions) ? detail.legendaryActions.length : creature.legendaryActions,
+          legendaryActionCount: Array.isArray(detail.legendaryActions) ? detail.legendaryActions.length : creature.legendaryActionCount,
+          legendaryActions: Array.isArray(detail.legendaryActions) ? detail.legendaryActions : [],
+          mythicActions: detail.mythicActions,
+          lairActions: detail.lairActions,
+          regionalEffects: detail.regionalEffects,
+          rawText: detail.rawText,
+          imagePrompt: detail.imagePrompt || buildMonsterImagePrompt({ ...creature, ...detail }),
         });
       }
       setMonsterLoadState("loaded");
@@ -634,6 +714,11 @@ export function InitiativeTracker({
                         <Info size={16} /> Stats
                       </button>
                     ) : null}
+                    {isEnemyParticipant(active) ? (
+                      <button type="button" onClick={() => copyToClipboard(monsterImagePromptJson(active))}>
+                        <ImageIcon size={16} /> Prompt
+                      </button>
+                    ) : null}
                   </div>
 
                   <textarea
@@ -651,8 +736,8 @@ export function InitiativeTracker({
               <Panel title="Acties">
                 {hasStatBlock(active) ? (
                   <div className="action-button-grid">
-                    {[...(active.actions || []), ...(active.reactions || []), ...(active.legendaryActions || [])].length ? (
-                      [...(active.actions || []), ...(active.reactions || []), ...(active.legendaryActions || [])].map((action) => (
+                    {activeActionOptions.length ? (
+                      activeActionOptions.map((action) => (
                         <button key={`${action.name}-${action.desc}`} type="button" onClick={() => openStatblock(active, action)}>
                           <Swords size={16} />
                           <span>
@@ -715,20 +800,24 @@ export function InitiativeTracker({
             <div className="monster-result-list">
               {monsterResults.length ? (
                 monsterResults.map((monster) => (
-                  <button
+                  <article
                     className={selectedMonster?.index === monster.index ? "monster-result monster-result--active" : "monster-result"}
                     key={monster.index}
-                    type="button"
-                    onClick={() => selectMonster(monster)}
                   >
-                    <span>
-                      <strong>{monster.name}</strong>
-                      <small>
-                        {monster.type || "monster"} - CR {monster.cr || "?"} - {monster.source || "library"}
-                      </small>
-                    </span>
+                    <button className="monster-result__main" type="button" onClick={() => selectMonster(monster)}>
+                      <span>
+                        <strong>{monster.name}</strong>
+                        <small>
+                          {monster.type || "monster"} - CR {monster.cr || "?"} - {monster.source || "library"}
+                        </small>
+                        <small>{monsterImagePromptSummary(monster)}</small>
+                      </span>
+                    </button>
+                    <button className="monster-result__copy" type="button" onClick={() => copyToClipboard(monsterImagePromptJson(monster))}>
+                      <Copy size={14} /> JSON
+                    </button>
                     <Tag tone={monster.actions?.length ? "safe" : "warning"}>{monster.role || "lookup"}</Tag>
-                  </button>
+                  </article>
                 ))
               ) : (
                 <EmptyState>Geen monsters gevonden.</EmptyState>
@@ -794,6 +883,9 @@ export function InitiativeTracker({
                         <Info size={15} /> Stats
                       </button>
                     ) : null}
+                    <button className="enemy-roster-card__stats enemy-roster-card__prompt" type="button" onClick={() => copyToClipboard(monsterImagePromptJson(enemy))}>
+                      <ImageIcon size={15} /> Prompt
+                    </button>
                   </div>
                     <div className="enemy-roster-stats">
                       <span>AC {enemy.ac}</span>
@@ -905,6 +997,10 @@ export function InitiativeTracker({
                       <button type="button" onClick={() => selectMonster(monster)}>
                         <strong>{monster.name}</strong>
                         <span>{monster.type || "monster"} / CR {monster.cr || "?"} / {monster.source || "library"}</span>
+                        <span>{monsterImagePromptSummary(monster)}</span>
+                      </button>
+                      <button className="button button--ghost" type="button" onClick={() => copyToClipboard(monsterImagePromptJson(monster))}>
+                        <Copy size={16} /> JSON
                       </button>
                       <button className="button button--primary" type="button" onClick={() => addMonsterFromPicker(monster, monsterCount)}>
                         <Plus size={16} /> Add

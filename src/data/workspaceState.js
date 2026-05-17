@@ -75,6 +75,15 @@ function monsterWithDefaults(monster) {
 }
 
 function initiativeParticipantWithDefaults(participant = {}) {
+  const legendaryActionList = Array.isArray(participant.legendaryActions)
+    ? participant.legendaryActions
+    : Array.isArray(participant.legendaryActionOptions)
+      ? participant.legendaryActionOptions
+      : [];
+  const legendaryActionCount = Number(
+    participant.legendaryActionCount ?? (Array.isArray(participant.legendaryActions) ? participant.legendaryActions.length : participant.legendaryActions || 0)
+  );
+
   return {
     id: participant.id || `turn-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     name: Object.prototype.hasOwnProperty.call(participant, "name") ? participant.name : "Nieuwe deelnemer",
@@ -89,28 +98,47 @@ function initiativeParticipantWithDefaults(participant = {}) {
     conditions: uniqueStrings(participant.conditions),
     concentration: Boolean(participant.concentration),
     reactionUsed: Boolean(participant.reactionUsed),
-    legendaryActions: Number(participant.legendaryActions || 0),
+    legendaryActionCount,
+    legendaryActions: legendaryActionList,
     lairAction: Boolean(participant.lairAction),
     notes: participant.notes || "",
     hiddenFromPlayers: Boolean(participant.hiddenFromPlayers),
     monsterIndex: participant.monsterIndex || "",
     source: participant.source || "",
+    sourceType: participant.sourceType || "",
+    sourceUrl: participant.sourceUrl || "",
+    imageUrl: participant.imageUrl || "",
     cr: participant.cr ?? "",
     xp: Number(participant.xp || 0),
     size: participant.size || "",
     type: participant.type || "",
     alignment: participant.alignment || "",
+    armorClassText: participant.armorClassText || "",
+    hitDice: participant.hitDice || "",
     speed: participant.speed || "",
     abilities: participant.abilities && typeof participant.abilities === "object" ? participant.abilities : {},
     saves: participant.saves && typeof participant.saves === "object" ? participant.saves : {},
     skills: participant.skills && typeof participant.skills === "object" ? participant.skills : {},
+    savingThrowsText: participant.savingThrowsText || "",
+    skillsText: participant.skillsText || "",
+    damageVulnerabilities: participant.damageVulnerabilities || "",
+    damageResistances: participant.damageResistances || "",
+    damageImmunities: participant.damageImmunities || "",
+    conditionImmunities: participant.conditionImmunities || "",
     senses: participant.senses || "",
     languages: participant.languages || "",
     traits: Array.isArray(participant.traits) ? participant.traits : [],
     actions: Array.isArray(participant.actions) ? participant.actions : [],
+    bonusActions: Array.isArray(participant.bonusActions) ? participant.bonusActions : [],
     reactions: Array.isArray(participant.reactions) ? participant.reactions : [],
+    mythicActions: Array.isArray(participant.mythicActions) ? participant.mythicActions : [],
+    lairActions: Array.isArray(participant.lairActions) ? participant.lairActions : [],
+    regionalEffects: Array.isArray(participant.regionalEffects) ? participant.regionalEffects : [],
+    rawText: participant.rawText || "",
     environment: Array.isArray(participant.environment) ? participant.environment : [],
     tags: Array.isArray(participant.tags) ? participant.tags : [],
+    aliases: Array.isArray(participant.aliases) ? participant.aliases : [],
+    imagePrompt: participant.imagePrompt || participant.image_prompt || null,
   };
 }
 

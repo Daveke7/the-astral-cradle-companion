@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
 import { Copy, LoaderCircle, Route, Search, ShieldAlert, Sparkles, Swords } from "lucide-react";
+import { buildEnemySearchIndex } from "../utils/enemySearchIndex.js";
 import { fetchSrdMonsterDetail, fetchSrdMonsterIndex } from "../utils/monsterStatblocks.js";
+import { monsterImagePromptJson, monsterImagePromptSummary } from "../utils/monsterImagePrompts.js";
 import { copyRandomEncounter, generateRandomEncounter } from "../utils/randomEncounterGenerator.js";
 import { useCompendiumEntries } from "../utils/useCompendiumEntries.js";
 import { EmptyState, Panel, Tag } from "./ui.jsx";
@@ -50,7 +52,7 @@ export function RandomEncounterGenerator({ onSeedInitiative }) {
   const [loadState, setLoadState] = useState("idle");
   const [error, setError] = useState("");
 
-  const monsterPool = useMemo(() => mergeMonsters(compendiumMonsters, onlineMonsters), [compendiumMonsters, onlineMonsters]);
+  const monsterPool = useMemo(() => buildEnemySearchIndex(mergeMonsters(compendiumMonsters, onlineMonsters)), [compendiumMonsters, onlineMonsters]);
   const usableMonsters = monsterPool.filter((monster) => Number(monster.xp || 0) > 0);
 
   async function loadOpenMonsters() {
@@ -161,8 +163,8 @@ export function RandomEncounterGenerator({ onSeedInitiative }) {
           </div>
           {error ? <p className="monster-source-warning">{error}</p> : null}
           <div className="random-encounter-source-notes">
-            <span>Fallback monsters bevatten Chult/Thayan starters zodat de generator offline blijft werken.</span>
-            <span>Open monsters worden pas geladen wanneer jij dat vraagt, zodat de app snel blijft.</span>
+            <span>De generator gebruikt dezelfde enemy index als Initiative en Enemies, inclusief de lokale PDF library.</span>
+            <span>Open monsters blijven optioneel; de app heeft nu al een grote offline pool.</span>
           </div>
         </Panel>
 
@@ -207,7 +209,11 @@ export function RandomEncounterGenerator({ onSeedInitiative }) {
                       <div>
                         <strong>{entry.count}x {entry.monster.name}</strong>
                         <span>CR {entry.monster.cr} / {entry.monster.role} / {entry.monster.xp} XP</span>
+                        <span>{monsterImagePromptSummary(entry.monster)}</span>
                       </div>
+                      <button className="button button--ghost" type="button" onClick={() => navigator.clipboard?.writeText(monsterImagePromptJson(entry.monster))}>
+                        <Copy size={15} /> JSON
+                      </button>
                       <Tag tone={entry.monster.source?.includes("Campaign") ? "warning" : "safe"}>{entry.monster.type || "monster"}</Tag>
                     </article>
                   ))}

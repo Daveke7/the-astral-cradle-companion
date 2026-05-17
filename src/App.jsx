@@ -6,6 +6,7 @@ import { ChultHexMap } from "./components/ChultHexMap.jsx";
 import { Compendium } from "./components/Compendium.jsx";
 import { Dashboard } from "./components/Dashboard.jsx";
 import { EncounterTracker } from "./components/EncounterTracker.jsx";
+import { EnemyBrowser } from "./components/EnemyBrowser.jsx";
 import { ImportCenter } from "./components/ImportCenter.jsx";
 import { InitiativeTracker } from "./components/InitiativeTracker.jsx";
 import { JungleTravel } from "./components/JungleTravel.jsx";
@@ -45,6 +46,7 @@ const modules = [
   { id: "travel", label: "Jungle Reis", modes: ["play", "generators"] },
   { id: "chult-map", label: "Chult Kaart", modes: ["play", "make"] },
   { id: "initiative", label: "Initiatief", modes: ["play"] },
+  { id: "enemies", label: "Enemies", modes: ["play"] },
   { id: "spells", label: "Spells", modes: ["play", "make"] },
   { id: "items", label: "Items", modes: ["play", "make", "players"] },
   { id: "magic-shop", label: "Magic Shop", modes: ["make", "play", "generators"] },
@@ -937,7 +939,8 @@ function App() {
           conditions: [],
           concentration: false,
           reactionUsed: false,
-          legendaryActions: 0,
+          legendaryActionCount: 0,
+          legendaryActions: [],
           lairAction: false,
           notes: "",
           hiddenFromPlayers: false,
@@ -1155,6 +1158,7 @@ function App() {
         onResetInitiative={resetInitiative}
       />
     ),
+    enemies: <EnemyBrowser onAddMonster={addInitiativeMonster} onNavigate={setActiveModule} />,
     spells: <SpellSheet />,
     items: <MagicItemSheet />,
     "magic-shop": <MagicShopGenerator />,

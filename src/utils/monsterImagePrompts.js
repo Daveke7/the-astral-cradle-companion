@@ -101,7 +101,7 @@ const ROLE_POSES = {
   leader: "dominant command stance, calm and dangerous, clearly directing lesser threats",
   minion: "compact aggressive pose, ready to swarm in with simple brutal intent",
   skirmisher: "dynamic flanking action pose, body twisted mid-motion as if circling prey",
-  soldier: "balanced battle-ready stance, guarded and disciplined, body, claws, teeth, magic, or limbs prepared",
+  soldier: "balanced battle-ready stance, guarded and disciplined, body, natural attacks, magic, or limbs prepared",
 };
 
 const TYPE_HINTS = {
@@ -171,7 +171,6 @@ const FAMILY_VISUAL_HINTS = [
   [/goblin|batiri/i, "small wiry goblinoid, sharp ears, painted mask or crude jungle gear"],
   [/kobold/i, "small draconic humanoid, snout, horns, tail, nervous aggressive stance"],
   [/troll/i, "tall lanky giant-like monster, long arms, rubbery hide, hooked claws, regenerating horror feel"],
-  [/giant\b/i, "towering humanoid with huge limbs, oversized weapons, rugged worn clothing"],
   [/skeleton/i, "animated skeleton, exposed bones, hollow eye sockets, old weapon or broken armor"],
   [/zombie/i, "shambling corpse, torn clothing, slack posture, decayed skin without graphic gore"],
   [/ghoul|ghast/i, "feral undead humanoid, hunched posture, long claws, corpse-pale skin"],
@@ -179,7 +178,7 @@ const FAMILY_VISUAL_HINTS = [
   [/wraith|specter|ghost/i, "translucent floating undead figure, ragged trailing form, hollow face"],
   [/vampire/i, "pale aristocratic undead, predatory elegance, sharp features, refined clothing"],
   [/lich/i, "skeletal undead spellcaster, ancient robes, jewel-like eyes, arcane hand gesture"],
-  [/dragon/i, "four-legged winged dragon, long tail, horns, claws, powerful neck and sweeping wings"],
+  [/\b(?:ancient|adult|young)?\s*(?:black|blue|green|red|white|gold|silver|bronze|brass|copper|crystal|emerald|amethyst|sapphire|topaz)?\s*dragon\b|\bfaerie dragon\b|\bdragon turtle\b|\bwyrmling\b/i, "four-legged winged dragon, long tail, horns, claws, powerful neck and sweeping wings"],
   [/wyvern/i, "two-legged draconic predator, batlike wings, barbed tail, narrow aggressive head"],
   [/drake/i, "grounded draconic beast, heavy claws, scaled hide, muscular low stance"],
   [/dinosaur|allosaurus|ankylosaurus|brontosaurus|deinonychus|hadrosaurus|stegosaurus|triceratops|tyrannosaurus|velociraptor/i, "prehistoric reptilian body, powerful legs, natural scales, distinct dinosaur silhouette"],
@@ -335,8 +334,17 @@ function subjectKind(monster = {}) {
   return "fantasy creature";
 }
 
+function isTrueDragonName(name = "") {
+  const text = cleanWords(name).toLowerCase();
+  if (/\bdragonshield\b|\bdragonborn\b/.test(text)) return false;
+  return /\bdragon\b|\bwyrmling\b|\bdrake\b|\bwyvern\b/.test(text);
+}
+
 function typeHint(monster = {}) {
   const type = String(monster.type || "").toLowerCase();
+  if (type.includes("dragon") && !isTrueDragonName(monster.name)) {
+    return "draconic humanoid or dragon-blooded creature design, scaled features without a full dragon body";
+  }
   const key = Object.keys(TYPE_HINTS).find((candidate) => type.includes(candidate));
   return key ? TYPE_HINTS[key] : "distinct readable silhouette, anatomy and gear matching its fantasy role";
 }
@@ -397,7 +405,7 @@ function campaignFlavor(monster = {}) {
     .toLowerCase();
 
   return [
-    text.includes("chult") || text.includes("jungle") ? "jungle-weathered skin, gear, feathers or hide without showing any jungle background" : "",
+    text.includes("chult") || text.includes("jungle") ? "jungle-weathered coloration, hide, feathers, scales or chitin without showing any jungle background" : "",
     text.includes("thay") || text.includes("red wizard") ? "sinister red-robed wizard details without symbols or readable text" : "",
     text.includes("firefinger") || text.includes("cliff") ? "high-roost wind-worn creature details without cliffs or scenery" : "",
     text.includes("undead") ? "ancient jungle undead horror mood in the body design only" : "",
@@ -431,7 +439,10 @@ function visualHintsFromText(monster = {}) {
   const name = cleanWords(monster.name || "");
   const corpus = detailCorpus(monster);
   const elements = elementCorpus(monster);
-  const familyHints = FAMILY_VISUAL_HINTS.filter(([pattern]) => pattern.test(`${name} ${corpus}`)).map(([, hint]) => hint);
+  const familyHints = FAMILY_VISUAL_HINTS.filter(([pattern, hint]) => {
+    if (hint.includes("four-legged winged dragon") && !isTrueDragonName(name)) return false;
+    return pattern.test(`${name} ${corpus}`);
+  }).map(([, hint]) => hint);
   const elementHints = ELEMENT_VISUAL_HINTS.filter(([pattern]) => pattern.test(elements)).map(([, hint]) => hint);
   const bodyHints = BODY_PART_HINTS.filter(([pattern]) => pattern.test(corpus)).map(([, hint]) => hint);
   const gearHints = heldGearHints(monster);

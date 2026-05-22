@@ -8,6 +8,7 @@ const sourceTypes = [
 ];
 
 const reviewFields = [
+  ["importMethod", "Import methode"],
   ["name", "Naam"],
   ["classSummary", "Class"],
   ["level", "Level"],
@@ -33,6 +34,7 @@ const reviewFields = [
   ["gear", "Gear"],
   ["currency", "Currency"],
   ["beyondCharacterId", "Beyond ID"],
+  ["jsonSource", "JSON bron"],
 ];
 
 export function ImportCenter({
@@ -115,7 +117,7 @@ export function ImportCenter({
             <div className="import-helper-strip">
               <span>
                 <DownloadCloud size={16} />
-                Beyond link probeert nu automatisch public character JSON op te halen.
+                Beyond link probeert public JSON, daarna embedded pagina-data, daarna HTML-tekst.
               </span>
               {review?.beyondApiUrl ? (
                 <a href={review.beyondApiUrl} target="_blank" rel="noreferrer">
@@ -211,7 +213,7 @@ export function ImportCenter({
           <Panel title="Regels">
             <ul className="rule-list">
               <li>Geen login of private account-sync: alleen publieke sheets of geplakte JSON.</li>
-              <li>Als de browser D&D Beyond blokkeert, open de JSON fallback en plak die inhoud.</li>
+              <li>Als de browser D&D Beyond blokkeert, plak de JSON of de pagina-bron als scraper fallback.</li>
               <li>Review-to-save voorkomt dat een rommelige paste je party overschrijft.</li>
               <li>Snapshots bewaren tafel-relevante stats per sessiemoment.</li>
             </ul>

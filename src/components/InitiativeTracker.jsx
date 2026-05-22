@@ -3,6 +3,7 @@ import {
   ArrowDown,
   ArrowUp,
   BookOpen,
+  Check,
   Copy,
   Dices,
   EyeOff,
@@ -29,6 +30,7 @@ import {
   monsterSearchRank,
 } from "../utils/monsterStatblocks.js";
 import { buildMonsterImagePrompt, monsterImagePromptJson, monsterImagePromptSummary } from "../utils/monsterImagePrompts.js";
+import { useCopyFeedback } from "../utils/useCopyFeedback.js";
 import { useCompendiumEntries } from "../utils/useCompendiumEntries.js";
 import { CommandModeSwitch } from "./v2/CommandPrimitives.jsx";
 import { EmptyState, Meter, Panel, Tag } from "./ui.jsx";
@@ -120,10 +122,24 @@ function copyToClipboard(value) {
   navigator.clipboard?.writeText(String(value || ""));
 }
 
-function renderMonsterImagePrompt(creature, { compact = false } = {}) {
+function CopyConfirmIcon({ active, size = 14 }) {
+  return active ? <Check size={size} /> : <Copy size={size} />;
+}
+
+function renderMonsterImagePrompt(creature, { compact = false, copyWithFeedback, isCopied, keyPrefix } = {}) {
   if (!creature) return null;
   const payload = buildMonsterImagePrompt(creature);
   const json = monsterImagePromptJson(creature);
+  const baseKey = keyPrefix || `monster-prompt-${creature.id || creature.index || creature.monsterIndex || creature.name}`;
+  const promptKey = `${baseKey}-prompt`;
+  const jsonKey = `${baseKey}-json`;
+  const promptCopied = Boolean(isCopied?.(promptKey));
+  const jsonCopied = Boolean(isCopied?.(jsonKey));
+
+  function handleCopy(value, key) {
+    if (copyWithFeedback) copyWithFeedback(value, key);
+    else copyToClipboard(value);
+  }
 
   return (
     <section className={compact ? "monster-image-prompt monster-image-prompt--compact" : "monster-image-prompt"}>
@@ -133,11 +149,21 @@ function renderMonsterImagePrompt(creature, { compact = false } = {}) {
           <span>Image prompt</span>
         </div>
         <div className="monster-image-prompt__actions">
-          <button type="button" onClick={() => copyToClipboard(payload.prompt)}>
-            <Copy size={14} /> Prompt
+          <button
+            className={promptCopied ? "copy-confirm copy-confirm--active" : "copy-confirm"}
+            type="button"
+            onClick={() => handleCopy(payload.prompt, promptKey)}
+            aria-live="polite"
+          >
+            <CopyConfirmIcon active={promptCopied} /> {promptCopied ? "Gekopieerd" : "Prompt"}
           </button>
-          <button type="button" onClick={() => copyToClipboard(json)}>
-            <Copy size={14} /> JSON
+          <button
+            className={jsonCopied ? "copy-confirm copy-confirm--active" : "copy-confirm"}
+            type="button"
+            onClick={() => handleCopy(json, jsonKey)}
+            aria-live="polite"
+          >
+            <CopyConfirmIcon active={jsonCopied} /> {jsonCopied ? "Gekopieerd" : "JSON"}
           </button>
         </div>
       </header>
@@ -171,7 +197,7 @@ function renderActionSection(title, actions = [], compact = false) {
   );
 }
 
-function renderStatBlock(creature, { compact = false, includeActions = true } = {}) {
+function renderStatBlock(creature, { compact = false, includeActions = true, copyWithFeedback, isCopied, copyKeyPrefix } = {}) {
   if (!creature) return <EmptyState>Selecteer een enemy om de statblock te zien.</EmptyState>;
   const abilities = creature.abilities || {};
   const abilityOrder = ["str", "dex", "con", "int", "wis", "cha"];
@@ -251,7 +277,12 @@ function renderStatBlock(creature, { compact = false, includeActions = true } = 
         </>
       ) : null}
 
-      {renderMonsterImagePrompt(creature, { compact })}
+      {renderMonsterImagePrompt(creature, {
+        compact,
+        copyWithFeedback,
+        isCopied,
+        keyPrefix: copyKeyPrefix || `statblock-${creature.id || creature.index || creature.monsterIndex || creature.name}`,
+      })}
       {!compact && creature.rawText ? (
         <details className="enemy-raw-statblock">
           <summary>Volledige PDF tekst</summary>
@@ -272,6 +303,7 @@ export function InitiativeTracker({
   onResetInitiative,
 }) {
   const compendiumMonsters = useCompendiumEntries("monsters");
+  const { copyWithFeedback, isCopied } = useCopyFeedback();
   const [viewMode, setViewMode] = useState("run");
   const [monsterSearch, setMonsterSearch] = useState("");
   const [monsterIndex, setMonsterIndex] = useState(() => buildEnemySearchIndex(compendiumMonsters));
@@ -715,8 +747,13 @@ export function InitiativeTracker({
                       </button>
                     ) : null}
                     {isEnemyParticipant(active) ? (
-                      <button type="button" onClick={() => copyToClipboard(monsterImagePromptJson(active))}>
-                        <ImageIcon size={16} /> Prompt
+                      <button
+                        className={isCopied(`active-prompt-json-${active.id}`) ? "copy-confirm copy-confirm--active" : "copy-confirm"}
+                        type="button"
+                        onClick={() => copyWithFeedback(monsterImagePromptJson(active), `active-prompt-json-${active.id}`)}
+                        aria-live="polite"
+                      >
+                        {isCopied(`active-prompt-json-${active.id}`) ? <Check size={16} /> : <ImageIcon size={16} />} {isCopied(`active-prompt-json-${active.id}`) ? "Gekopieerd" : "Prompt"}
                       </button>
                     ) : null}
                   </div>
@@ -813,8 +850,13 @@ export function InitiativeTracker({
                         <small>{monsterImagePromptSummary(monster)}</small>
                       </span>
                     </button>
-                    <button className="monster-result__copy" type="button" onClick={() => copyToClipboard(monsterImagePromptJson(monster))}>
-                      <Copy size={14} /> JSON
+                    <button
+                      className={isCopied(`monster-result-json-${monster.index}`) ? "monster-result__copy copy-confirm copy-confirm--active" : "monster-result__copy copy-confirm"}
+                      type="button"
+                      onClick={() => copyWithFeedback(monsterImagePromptJson(monster), `monster-result-json-${monster.index}`)}
+                      aria-live="polite"
+                    >
+                      <CopyConfirmIcon active={isCopied(`monster-result-json-${monster.index}`)} /> {isCopied(`monster-result-json-${monster.index}`) ? "Gekopieerd" : "JSON"}
                     </button>
                     <Tag tone={monster.actions?.length ? "safe" : "warning"}>{monster.role || "lookup"}</Tag>
                   </article>
@@ -847,7 +889,11 @@ export function InitiativeTracker({
                 <span>Statblock laden...</span>
               </div>
             ) : (
-              renderStatBlock(selectedMonster)
+              renderStatBlock(selectedMonster, {
+                copyWithFeedback,
+                isCopied,
+                copyKeyPrefix: `initiative-preview-${selectedMonster?.index || selectedMonster?.name}`,
+              })
             )}
             <div className="enemy-add-row">
               <button
@@ -883,8 +929,13 @@ export function InitiativeTracker({
                         <Info size={15} /> Stats
                       </button>
                     ) : null}
-                    <button className="enemy-roster-card__stats enemy-roster-card__prompt" type="button" onClick={() => copyToClipboard(monsterImagePromptJson(enemy))}>
-                      <ImageIcon size={15} /> Prompt
+                    <button
+                      className={isCopied(`enemy-roster-json-${enemy.id}`) ? "enemy-roster-card__stats enemy-roster-card__prompt copy-confirm copy-confirm--active" : "enemy-roster-card__stats enemy-roster-card__prompt copy-confirm"}
+                      type="button"
+                      onClick={() => copyWithFeedback(monsterImagePromptJson(enemy), `enemy-roster-json-${enemy.id}`)}
+                      aria-live="polite"
+                    >
+                      {isCopied(`enemy-roster-json-${enemy.id}`) ? <Check size={15} /> : <ImageIcon size={15} />} {isCopied(`enemy-roster-json-${enemy.id}`) ? "Gekopieerd" : "Prompt"}
                     </button>
                   </div>
                     <div className="enemy-roster-stats">
@@ -999,8 +1050,13 @@ export function InitiativeTracker({
                         <span>{monster.type || "monster"} / CR {monster.cr || "?"} / {monster.source || "library"}</span>
                         <span>{monsterImagePromptSummary(monster)}</span>
                       </button>
-                      <button className="button button--ghost" type="button" onClick={() => copyToClipboard(monsterImagePromptJson(monster))}>
-                        <Copy size={16} /> JSON
+                      <button
+                        className={isCopied(`enemy-picker-json-${monster.index}`) ? "button button--ghost copy-confirm copy-confirm--active" : "button button--ghost copy-confirm"}
+                        type="button"
+                        onClick={() => copyWithFeedback(monsterImagePromptJson(monster), `enemy-picker-json-${monster.index}`)}
+                        aria-live="polite"
+                      >
+                        <CopyConfirmIcon active={isCopied(`enemy-picker-json-${monster.index}`)} size={16} /> {isCopied(`enemy-picker-json-${monster.index}`) ? "Gekopieerd" : "JSON"}
                       </button>
                       <button className="button button--primary" type="button" onClick={() => addMonsterFromPicker(monster, monsterCount)}>
                         <Plus size={16} /> Add
@@ -1019,7 +1075,13 @@ export function InitiativeTracker({
                     <span>Statblock laden...</span>
                   </div>
                 ) : (
-                  renderStatBlock(selectedMonster, { compact: true, includeActions: false })
+                  renderStatBlock(selectedMonster, {
+                    compact: true,
+                    includeActions: false,
+                    copyWithFeedback,
+                    isCopied,
+                    copyKeyPrefix: `initiative-picker-preview-${selectedMonster?.index || selectedMonster?.name}`,
+                  })
                 )}
                 <button
                   className="button button--primary"
@@ -1075,7 +1137,11 @@ export function InitiativeTracker({
               </section>
             ) : null}
 
-            {renderStatBlock(statblockTarget)}
+            {renderStatBlock(statblockTarget, {
+              copyWithFeedback,
+              isCopied,
+              copyKeyPrefix: `initiative-drawer-${statblockTarget?.id || statblockTarget?.index || statblockTarget?.name}`,
+            })}
           </aside>
         </div>
       ) : null}

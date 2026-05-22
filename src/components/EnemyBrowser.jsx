@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
-import { BookOpen, Copy, Image as ImageIcon, Search, Shield, SlidersHorizontal, Swords } from "lucide-react";
+import { BookOpen, Check, Copy, Image as ImageIcon, Search, Shield, SlidersHorizontal, Swords } from "lucide-react";
 import { fallbackMonsterLibrary } from "../data/systems/monsterLibrary.js";
 import { buildEnemySearchIndex } from "../utils/enemySearchIndex.js";
 import { abilityModifier, monsterMatchesSearch, monsterSearchRank } from "../utils/monsterStatblocks.js";
 import { monsterImagePromptJson, monsterImagePromptSummary } from "../utils/monsterImagePrompts.js";
 import { useCompendiumEntries } from "../utils/useCompendiumEntries.js";
+import { useCopyFeedback } from "../utils/useCopyFeedback.js";
 import { EmptyState, Panel, Tag } from "./ui.jsx";
 
 const crBands = [
@@ -31,10 +32,6 @@ const sortOptions = [
   { id: "cr-desc", label: "CR hoog-laag" },
   { id: "source", label: "Bron" },
 ];
-
-function copyText(value) {
-  navigator.clipboard?.writeText(String(value || ""));
-}
 
 function crNumber(value) {
   if (value === undefined || value === null || value === "" || value === "?" || value === "-") return null;
@@ -121,12 +118,18 @@ function renderActionSection(title, actions = []) {
   );
 }
 
-function EnemyDetail({ enemy, count, onCountChange, onAddMonster, onNavigate }) {
+function CopyConfirmIcon({ active, size = 14 }) {
+  return active ? <Check size={size} /> : <Copy size={size} />;
+}
+
+function EnemyDetail({ enemy, count, onCountChange, onAddMonster, onNavigate, onCopyJson, isCopied }) {
   if (!enemy) {
     return <EmptyState>Kies links een enemy om de volledige statblock te zien.</EmptyState>;
   }
 
   const abilities = enemy.abilities || {};
+  const detailJsonKey = `enemy-detail-json-${enemy.index}`;
+  const detailJsonCopied = isCopied?.(detailJsonKey);
 
   return (
     <article className="enemy-detail-card">
@@ -221,8 +224,13 @@ function EnemyDetail({ enemy, count, onCountChange, onAddMonster, onNavigate }) 
             <span>Image prompt</span>
           </div>
           <div className="monster-image-prompt__actions">
-            <button type="button" onClick={() => copyText(monsterImagePromptJson(enemy))}>
-              <Copy size={14} /> JSON
+            <button
+              className={detailJsonCopied ? "copy-confirm copy-confirm--active" : "copy-confirm"}
+              type="button"
+              onClick={() => onCopyJson?.(enemy, detailJsonKey)}
+              aria-live="polite"
+            >
+              <CopyConfirmIcon active={detailJsonCopied} /> {detailJsonCopied ? "Gekopieerd" : "JSON"}
             </button>
           </div>
         </header>
@@ -242,6 +250,7 @@ function EnemyDetail({ enemy, count, onCountChange, onAddMonster, onNavigate }) 
 
 export function EnemyBrowser({ onAddMonster, onNavigate }) {
   const compendiumMonsters = useCompendiumEntries("monsters");
+  const { copyWithFeedback, isCopied } = useCopyFeedback();
   const enemyIndex = useMemo(() => buildEnemySearchIndex(compendiumMonsters), [compendiumMonsters]);
   const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
@@ -279,6 +288,14 @@ export function EnemyBrowser({ onAddMonster, onNavigate }) {
     setSelectedIndex(enemy.index);
   }
 
+  function copyPromptJson(enemy, key) {
+    if (!enemy) return;
+    copyWithFeedback(monsterImagePromptJson(enemy), key || `enemy-json-${enemy.index}`);
+  }
+
+  const topJsonKey = selectedEnemy ? `enemy-top-json-${selectedEnemy.index}` : "enemy-top-json";
+  const topJsonCopied = isCopied(topJsonKey);
+
   return (
     <main className="workspace enemies-page">
       <header className="topbar enemies-page__header">
@@ -288,8 +305,14 @@ export function EnemyBrowser({ onAddMonster, onNavigate }) {
           <span>{enemyIndex.length} lokale enemies uit PDF, campaign, imports en Chult-tabellen. Monsters én humanoids zitten in dezelfde zoekmachine.</span>
         </div>
         <div className="topbar__actions">
-          <button className="button button--ghost" type="button" onClick={() => copyText(monsterImagePromptJson(selectedEnemy))} disabled={!selectedEnemy}>
-            <Copy size={17} /> Prompt JSON
+          <button
+            className={topJsonCopied ? "button button--ghost copy-confirm copy-confirm--active" : "button button--ghost copy-confirm"}
+            type="button"
+            onClick={() => copyPromptJson(selectedEnemy, topJsonKey)}
+            disabled={!selectedEnemy}
+            aria-live="polite"
+          >
+            <CopyConfirmIcon active={topJsonCopied} size={17} /> {topJsonCopied ? "Gekopieerd" : "Prompt JSON"}
           </button>
           <button className="button button--primary" type="button" onClick={() => selectedEnemy && onAddMonster?.(selectedEnemy, count)} disabled={!selectedEnemy}>
             <Swords size={17} /> Naar Initiative
@@ -374,7 +397,15 @@ export function EnemyBrowser({ onAddMonster, onNavigate }) {
         </Panel>
 
         <Panel title="Statblock" className="enemies-detail-panel">
-          <EnemyDetail enemy={selectedEnemy} count={count} onCountChange={setCount} onAddMonster={onAddMonster} onNavigate={onNavigate} />
+          <EnemyDetail
+            enemy={selectedEnemy}
+            count={count}
+            onCountChange={setCount}
+            onAddMonster={onAddMonster}
+            onNavigate={onNavigate}
+            onCopyJson={copyPromptJson}
+            isCopied={isCopied}
+          />
         </Panel>
       </section>
     </main>

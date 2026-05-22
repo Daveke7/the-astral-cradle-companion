@@ -107,50 +107,224 @@ export async function fetchDndBeyondCharacter(value = "") {
   if (!characterId) throw new Error("Geen D&D Beyond character-id gevonden in deze link.");
 
   const endpoints = [
-    `https://character-service.dndbeyond.com/character/v5/character/${characterId}`,
-    `https://www.dndbeyond.com/characters/${characterId}/json`,
+    {
+      url: `https://character-service.dndbeyond.com/character/v5/character/${characterId}`,
+      kind: "json",
+      label: "Character service JSON",
+      accept: "application/json,text/plain,*/*",
+    },
+    {
+      url: `https://www.dndbeyond.com/characters/${characterId}/json`,
+      kind: "json",
+      label: "Character JSON fallback",
+      accept: "application/json,text/plain,*/*",
+    },
+    {
+      url: `https://www.dndbeyond.com/characters/${characterId}`,
+      kind: "html",
+      label: "Beyond HTML scraper fallback",
+      accept: "text/html,application/xhtml+xml,application/json,text/plain,*/*",
+    },
   ];
   let lastError = "";
 
   for (const endpoint of endpoints) {
     try {
-      const response = await fetch(endpoint, {
-        headers: { accept: "application/json,text/plain,*/*" },
+      const response = await fetch(endpoint.url, {
+        headers: { accept: endpoint.accept },
       });
       if (!response.ok) {
         lastError = `${response.status} ${response.statusText}`;
         continue;
       }
-      const payload = await response.json();
-      if (payload?.data || payload?.character || payload?.name) {
-        return { characterId, endpoint, payload };
+
+      const sourceText = await response.text();
+      const { parsed, jsonParsed, jsonSource } = parseJsonPayload(sourceText);
+      if (jsonParsed && isCharacterLikePayload(parsed)) {
+        return {
+          characterId,
+          endpoint: endpoint.url,
+          endpointLabel: endpoint.label,
+          payload: parsed,
+          sourceText,
+          sourceKind: endpoint.kind === "html" ? "html-json" : "json",
+          jsonSource,
+        };
       }
-      lastError = "De endpoint gaf geen herkenbare character JSON terug.";
+
+      if (endpoint.kind === "html") {
+        const readableText = htmlToReadableText(sourceText);
+        const textData = parseTextImport(readableText);
+        if (Object.values(textData).filter(hasValue).length >= 3) {
+          return {
+            characterId,
+            endpoint: endpoint.url,
+            endpointLabel: endpoint.label,
+            payload: null,
+            sourceText,
+            sourceKind: "html-text",
+            jsonSource: "",
+          };
+        }
+      }
+
+      lastError = `${endpoint.label} gaf geen herkenbare character-data terug.`;
     } catch (error) {
       lastError = error.message || "Browser kon D&D Beyond niet ophalen.";
     }
   }
 
   throw new Error(
-    `D&D Beyond kon niet automatisch worden gelezen (${lastError}). Zet de sheet op Public, open de JSON-link, en plak de JSON hier als je browser dit blokkeert.`
+    `D&D Beyond kon niet automatisch worden gelezen (${lastError}). Zet de sheet op Public; als D&D Beyond/CORS blokkeert, plak de JSON of pagina-bron hier.`
   );
+}
+
+function tryParseJson(value = "") {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
+function decodeHtmlEntities(value = "") {
+  const namedEntities = {
+    amp: "&",
+    apos: "'",
+    gt: ">",
+    lt: "<",
+    nbsp: " ",
+    quot: '"',
+  };
+
+  return String(value).replace(/&(#x?[0-9a-f]+|[a-z]+);/gi, (match, entity) => {
+    const key = entity.toLowerCase();
+    if (key.startsWith("#x")) {
+      const code = Number.parseInt(key.slice(2), 16);
+      return Number.isFinite(code) ? String.fromCodePoint(code) : match;
+    }
+    if (key.startsWith("#")) {
+      const code = Number.parseInt(key.slice(1), 10);
+      return Number.isFinite(code) ? String.fromCodePoint(code) : match;
+    }
+    return namedEntities[key] || match;
+  });
+}
+
+function htmlToReadableText(sourceText = "") {
+  return decodeHtmlEntities(sourceText)
+    .replace(/<script\b[\s\S]*?<\/script>/gi, "\n")
+    .replace(/<style\b[\s\S]*?<\/style>/gi, "\n")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(address|article|aside|blockquote|dd|details|div|dl|dt|fieldset|figcaption|figure|footer|form|h[1-6]|header|li|main|nav|ol|p|pre|section|table|tbody|td|tfoot|th|thead|tr|ul)>/gi, "\n")
+    .replace(/<(dt|dd|td|th|li)\b[^>]*>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .split("\n")
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter(Boolean)
+    .join("\n");
+}
+
+function extractBalancedJson(source = "", startIndex = 0) {
+  const startOffset = source.slice(startIndex).search(/[[{]/);
+  if (startOffset < 0) return "";
+
+  const start = startIndex + startOffset;
+  const open = source[start];
+  const close = open === "{" ? "}" : "]";
+  let depth = 0;
+  let quote = "";
+  let escaped = false;
+
+  for (let index = start; index < source.length; index += 1) {
+    const char = source[index];
+    if (quote) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === quote) {
+        quote = "";
+      }
+      continue;
+    }
+
+    if (char === '"' || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (char === open) depth += 1;
+    if (char === close) depth -= 1;
+    if (depth === 0) return source.slice(start, index + 1);
+  }
+
+  return "";
+}
+
+function collectJsonCandidates(source = "") {
+  const candidates = [];
+  const scriptPattern = /<script\b([^>]*)>([\s\S]*?)<\/script>/gi;
+  let scriptMatch = scriptPattern.exec(source);
+
+  while (scriptMatch) {
+    const attrs = scriptMatch[1] || "";
+    const body = decodeHtmlEntities(clean(scriptMatch[2] || ""));
+    const looksLikeJson = /^[{[]/.test(body);
+    const looksRelevant =
+      /__NEXT_DATA__|application\/json|application\/ld\+json|character|preload|initial/i.test(attrs) ||
+      /"character"|"classes"|"stats"|"inventory"|characterData|__INITIAL_STATE__/i.test(body);
+
+    if (body && looksLikeJson && looksRelevant) {
+      candidates.push({ label: attrs.match(/id=["']([^"']+)["']/i)?.[1] || "script-json", text: body });
+    }
+    scriptMatch = scriptPattern.exec(source);
+  }
+
+  const markers = [
+    "__NEXT_DATA__",
+    "__INITIAL_STATE__",
+    "__PRELOADED_STATE__",
+    "__APOLLO_STATE__",
+    "__CHARACTER_DATA__",
+    "characterData",
+    "characterJson",
+    "ddbCharacter",
+  ];
+  const lowerSource = source.toLowerCase();
+
+  markers.forEach((marker) => {
+    let searchIndex = 0;
+    const needle = marker.toLowerCase();
+    while (searchIndex < source.length) {
+      const markerIndex = lowerSource.indexOf(needle, searchIndex);
+      if (markerIndex < 0) break;
+      const jsonText = extractBalancedJson(source, markerIndex + marker.length);
+      if (jsonText) candidates.push({ label: marker, text: decodeHtmlEntities(jsonText) });
+      searchIndex = markerIndex + marker.length;
+    }
+  });
+
+  return candidates;
 }
 
 function parseJsonPayload(sourceText = "") {
   const source = clean(sourceText);
-  try {
-    return { parsed: JSON.parse(source), jsonParsed: true };
-  } catch {
-    const nextData = source.match(/<script[^>]+id=["']__NEXT_DATA__["'][^>]*>([\s\S]*?)<\/script>/i)?.[1];
-    if (nextData) {
-      try {
-        return { parsed: JSON.parse(nextData), jsonParsed: true };
-      } catch {
-        return { parsed: null, jsonParsed: false };
-      }
-    }
-    return { parsed: null, jsonParsed: false };
+  const direct = source ? tryParseJson(source) : null;
+  if (direct) {
+    return { parsed: direct, jsonParsed: true, jsonSource: "direct-json" };
   }
+
+  const parsedCandidates = collectJsonCandidates(source)
+    .map((candidate) => ({ ...candidate, parsed: tryParseJson(candidate.text) }))
+    .filter((candidate) => candidate.parsed);
+  const best = parsedCandidates.sort(
+    (left, right) => scoreCharacterPayload(right.parsed) - scoreCharacterPayload(left.parsed)
+  )[0];
+  const bestScore = best ? scoreCharacterPayload(best.parsed) : 0;
+
+  return best && bestScore >= 2
+    ? { parsed: best.parsed, jsonParsed: true, jsonSource: best.label }
+    : { parsed: null, jsonParsed: false, jsonSource: "" };
 }
 
 function characterDataFromPayload(parsed = {}) {
@@ -161,6 +335,27 @@ function characterDataFromPayload(parsed = {}) {
       : parsed?.character?.data
         ? parsed.character.data
         : parsed?.character || parsed;
+}
+
+function scoreCharacterPayload(parsed = {}) {
+  const data = characterDataFromPayload(parsed);
+  const checks = [
+    data?.id,
+    data?.name,
+    findDeep(data, ["characterName"]),
+    findDeep(data, ["classes"]),
+    findDeep(data, ["stats"]),
+    findDeep(data, ["inventory"]),
+    findDeep(data, ["race", "species"]),
+    findDeep(data, ["modifiers"]),
+    findDeep(data, ["spells"]),
+    findDeep(data, ["baseHitPoints", "hitPointMaximum", "maxHp"]),
+  ];
+  return checks.filter((value) => hasValue(value)).length;
+}
+
+function isCharacterLikePayload(parsed = {}) {
+  return scoreCharacterPayload(parsed) >= 2;
 }
 
 function classSummaryFromJson(data) {
@@ -353,8 +548,8 @@ function notesFromJson(data) {
 }
 
 function parseJsonImport(sourceText = "", beyondUrl = "") {
-  const { parsed, jsonParsed } = parseJsonPayload(sourceText);
-  if (!jsonParsed) return { data: {}, jsonParsed: false };
+  const { parsed, jsonParsed, jsonSource } = parseJsonPayload(sourceText);
+  if (!jsonParsed) return { data: {}, jsonParsed: false, jsonSource: "" };
 
   const data = characterDataFromPayload(parsed);
   const level = firstDefined(totalLevelFromJson(data), findDeep(data, ["level"]));
@@ -416,8 +611,11 @@ function parseJsonImport(sourceText = "", beyondUrl = "") {
       beyondCharacterId: characterId ? String(characterId) : "",
       beyondApiUrl: apiUrl,
       campaignName: firstDefined(findByPath(data, "campaign.name"), findDeep(data, ["campaignName"])),
+      importMethod: jsonSource === "direct-json" ? "JSON" : `Embedded JSON (${jsonSource})`,
+      jsonSource,
     },
     jsonParsed: true,
+    jsonSource,
   };
 }
 
@@ -448,7 +646,11 @@ function hasValue(value) {
   return Array.isArray(value) ? value.length > 0 : clean(value) !== "";
 }
 
-function importConfidence(data, fromJson, sourceText, beyondCharacterId, url) {
+function looksLikeHtml(sourceText = "") {
+  return /<\/?[a-z][\s\S]*>/i.test(sourceText) && /<html|<body|<script|<div|<section|<main|<span/i.test(sourceText);
+}
+
+function importConfidence(data, fromJson, sourceText, beyondCharacterId, url, htmlParsed = false) {
   const importantFields = [
     "name",
     "classSummary",
@@ -470,8 +672,9 @@ function importConfidence(data, fromJson, sourceText, beyondCharacterId, url) {
   const found = importantFields.filter((key) => hasValue(data[key])).length + (beyondCharacterId ? 1 : 0) + (url ? 1 : 0);
   const base = Math.round((found / (importantFields.length + 2)) * 100);
   const jsonBonus = fromJson ? 12 : 0;
+  const htmlBonus = htmlParsed ? 5 : 0;
   const sourcePenalty = sourceText ? 0 : 22;
-  return Math.min(99, Math.max(12, base + jsonBonus - sourcePenalty));
+  return Math.min(99, Math.max(12, base + jsonBonus + htmlBonus - sourcePenalty));
 }
 
 export function parsePartyImport(importCenter = {}) {
@@ -479,7 +682,9 @@ export function parsePartyImport(importCenter = {}) {
   const url = clean(importCenter.url);
   const warnings = [];
   const fromJson = sourceText ? parseJsonImport(sourceText, url) : { data: {}, jsonParsed: false };
-  const fromText = sourceText && !fromJson.jsonParsed ? parseTextImport(sourceText) : {};
+  const htmlParsed = Boolean(sourceText && !fromJson.jsonParsed && looksLikeHtml(sourceText));
+  const fallbackText = htmlParsed ? htmlToReadableText(sourceText) : sourceText;
+  const fromText = sourceText && !fromJson.jsonParsed ? parseTextImport(fallbackText) : {};
   const beyondCharacterId = firstDefined(fromJson.data.beyondCharacterId, parseBeyondCharacterId(url));
   const data = {
     ...fromText,
@@ -487,16 +692,23 @@ export function parsePartyImport(importCenter = {}) {
     beyondUrl: url || fromJson.data.beyondUrl || "",
     beyondCharacterId,
     beyondApiUrl: fromJson.data.beyondApiUrl || buildBeyondCharacterApiUrl(url),
+    importMethod:
+      fromJson.data.importMethod ||
+      (htmlParsed ? "HTML scraper fallback" : sourceText ? "Manual text fallback" : "Geen bron geanalyseerd"),
+    jsonSource: fromJson.jsonSource || "",
   };
 
   if (importCenter.sourceType === "beyond-url" && !beyondCharacterId) {
     warnings.push("Geen D&D Beyond character-id in de link gevonden. Gebruik een publieke character-link met /characters/123456.");
   }
   if (importCenter.sourceType === "beyond-url" && !sourceText) {
-    warnings.push("Alleen de link is nog niet genoeg als D&D Beyond/CORS automatisch ophalen blokkeert. Open dan de JSON-link en plak de JSON.");
+    warnings.push("Alleen de link is nog niet genoeg als D&D Beyond/CORS automatisch ophalen blokkeert. De app probeert JSON en daarna HTML, maar je kunt ook JSON of pagina-bron plakken.");
   }
   if (sourceText && !fromJson.jsonParsed && Object.values(fromText).filter(Boolean).length < 3) {
     warnings.push("De geplakte tekst lijkt weinig herkenbare character velden te bevatten.");
+  }
+  if (htmlParsed && Object.values(fromText).filter(Boolean).length >= 3) {
+    warnings.push("HTML scraper fallback gebruikt: check vooral AC, HP, spells en gear voordat je toepast.");
   }
   if (!sourceText && importCenter.sourceType !== "beyond-url") {
     warnings.push("Plak JSON of tekst voordat je analyseert.");
@@ -507,7 +719,8 @@ export function parsePartyImport(importCenter = {}) {
     ...data,
     sourceType: importCenter.sourceType,
     jsonParsed: fromJson.jsonParsed,
-    confidence: importConfidence(data, fromJson.jsonParsed, sourceText, beyondCharacterId, url),
+    htmlParsed,
+    confidence: importConfidence(data, fromJson.jsonParsed, sourceText, beyondCharacterId, url, htmlParsed),
     warnings,
     parsedAt: new Date().toISOString(),
   };

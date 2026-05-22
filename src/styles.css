@@ -35,6 +35,297 @@
   --inner-line: inset 0 0 0 1px rgba(64, 87, 90, 0.1);
 }
 
+.monster-card-forge__summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.monster-card-forge__summary article {
+  display: grid;
+  gap: 0.14rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid rgba(64, 87, 90, 0.16);
+  border-radius: var(--radius-panel);
+  background: rgba(255, 244, 223, 0.5);
+  box-shadow: var(--inner-line);
+}
+
+.monster-card-forge__summary span,
+.monster-card-forge__summary small {
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 850;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.monster-card-forge__summary strong {
+  color: var(--text);
+  font-size: 1.7rem;
+  line-height: 1;
+}
+
+.monster-card-forge__layout {
+  display: grid;
+  grid-template-columns: minmax(28rem, 1fr) minmax(22rem, 0.46fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.monster-card-search {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-height: 2.65rem;
+  padding: 0 0.75rem;
+  border: 1px solid rgba(64, 87, 90, 0.22);
+  border-radius: var(--radius-control);
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.monster-card-search input {
+  width: 100%;
+  min-height: 2.35rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.monster-card-results,
+.monster-card-selection {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 0.75rem;
+}
+
+.monster-card-results {
+  max-height: 36rem;
+  overflow: auto;
+  padding-right: 0.25rem;
+}
+
+.monster-card-result,
+.monster-card-selection article {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.65rem;
+  align-items: center;
+  width: 100%;
+  padding: 0.65rem;
+  border: 1px solid rgba(64, 87, 90, 0.16);
+  border-radius: 0.56rem;
+  background: rgba(255, 255, 255, 0.24);
+  color: var(--text);
+  text-align: left;
+}
+
+.monster-card-result {
+  cursor: pointer;
+}
+
+.monster-card-result:hover,
+.monster-card-result--active {
+  border-color: rgba(152, 113, 60, 0.52);
+  background: rgba(152, 113, 60, 0.12);
+}
+
+.monster-card-result span,
+.monster-card-selection article > div {
+  display: grid;
+  gap: 0.16rem;
+  min-width: 0;
+}
+
+.monster-card-result strong,
+.monster-card-selection strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.monster-card-result small,
+.monster-card-selection small,
+.monster-card-format-note {
+  color: var(--muted);
+  font-size: 0.76rem;
+  line-height: 1.35;
+}
+
+.monster-card-options {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.monster-card-options label {
+  display: grid;
+  gap: 0.28rem;
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 850;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.monster-card-options .check-row {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 0.6rem;
+  border: 1px solid rgba(64, 87, 90, 0.14);
+  border-radius: 0.48rem;
+  background: rgba(255, 255, 255, 0.18);
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 750;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.monster-card-format-note {
+  display: flex;
+  gap: 0.55rem;
+  align-items: flex-start;
+  margin-top: 0.8rem;
+  padding: 0.65rem;
+  border: 1px solid rgba(152, 113, 60, 0.2);
+  border-radius: 0.5rem;
+  background: rgba(152, 113, 60, 0.1);
+}
+
+.monster-card-selection article {
+  grid-template-columns: minmax(0, 1fr) 4.4rem auto;
+  margin: 0;
+}
+
+.monster-card-selection label {
+  display: flex;
+  align-items: center;
+  gap: 0.24rem;
+  color: var(--muted);
+}
+
+.monster-card-selection input {
+  width: 3rem;
+  min-height: 2.05rem;
+  padding: 0 0.3rem;
+  text-align: center;
+}
+
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.15rem;
+  height: 2.15rem;
+  border: 1px solid rgba(64, 87, 90, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.24);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.icon-button:hover {
+  border-color: rgba(167, 74, 53, 0.35);
+  color: var(--crimson);
+}
+
+.monster-print-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.monster-print-card {
+  display: grid;
+  gap: 0.65rem;
+  min-height: 18rem;
+  padding: 0.85rem;
+  border: 1px solid rgba(35, 29, 20, 0.28);
+  border-radius: 0.7rem;
+  background:
+    linear-gradient(145deg, rgba(255, 244, 223, 0.96), rgba(240, 226, 203, 0.86)),
+    var(--parchment);
+  box-shadow: 0 16px 34px rgba(47, 35, 20, 0.13);
+}
+
+.monster-print-card header {
+  display: grid;
+  gap: 0.16rem;
+  padding-bottom: 0.55rem;
+  border-bottom: 1px solid rgba(152, 113, 60, 0.26);
+}
+
+.monster-print-card header span {
+  color: var(--brass);
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.monster-print-card h3 {
+  margin: 0;
+  font-size: 1.08rem;
+  line-height: 1.12;
+}
+
+.monster-print-card small {
+  color: var(--muted);
+}
+
+.monster-print-card__stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.35rem;
+}
+
+.monster-print-card__stats span {
+  display: grid;
+  gap: 0.1rem;
+  padding: 0.4rem;
+  border: 1px solid rgba(64, 87, 90, 0.12);
+  border-radius: 0.42rem;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.monster-print-card__stats strong {
+  color: var(--text);
+  font-size: 1rem;
+}
+
+.monster-print-card pre,
+.monster-card-json {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.monster-print-card pre {
+  max-height: 10rem;
+  overflow: hidden;
+  color: var(--text);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 0.82rem;
+  line-height: 1.36;
+}
+
+.monster-card-json {
+  max-height: 28rem;
+  overflow: auto;
+  padding: 0.75rem;
+  border: 1px solid rgba(64, 87, 90, 0.14);
+  border-radius: 0.55rem;
+  background: rgba(35, 29, 20, 0.06);
+  color: var(--text);
+  font-size: 0.75rem;
+}
+
 .spell-sheet-layout {
   display: grid;
   grid-template-columns: minmax(18rem, 0.75fr) minmax(26rem, 1.18fr) minmax(18rem, 0.72fr);
@@ -2056,6 +2347,33 @@ nav {
 .button--ghost {
   background: rgba(159, 176, 198, 0.045);
   color: var(--paper);
+}
+
+.copy-confirm {
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    transform 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.copy-confirm--active,
+.button.copy-confirm--active,
+.monster-image-prompt__actions .copy-confirm--active,
+.monster-result__copy.copy-confirm--active,
+.enemy-roster-card__prompt.copy-confirm--active {
+  border-color: rgba(152, 113, 60, 0.65) !important;
+  background: linear-gradient(180deg, rgba(230, 197, 133, 0.9), rgba(174, 125, 55, 0.9)) !important;
+  color: #2b2116 !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.36),
+    0 0 0 2px rgba(152, 113, 60, 0.16);
+  transform: translateY(-1px);
+}
+
+.copy-confirm--active svg {
+  stroke-width: 3;
 }
 
 .panel {
@@ -10493,4 +10811,28 @@ textarea,
 .travel-play-page .travel-route-node--current span,
 .travel-play-page .travel-route-node--current small {
   color: #c0ae90;
+}
+
+@media (max-width: 1050px) {
+  .monster-card-forge__layout {
+    grid-template-columns: 1fr;
+  }
+
+  .monster-print-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .monster-card-forge__summary {
+    grid-template-columns: 1fr;
+  }
+
+  .monster-card-selection article {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .monster-card-selection label {
+    grid-column: 1;
+  }
 }

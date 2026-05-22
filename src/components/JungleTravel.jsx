@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import {
   AlertTriangle,
   Bug,
+  Check,
   CheckCircle2,
   Compass,
   Copy,
@@ -30,6 +31,7 @@ import {
 } from "../data/systems/travelSystem.js";
 import { getToaEncounterDetail } from "../data/systems/toaEncounterDetails.js";
 import { buildChultRouteAnalysis, buildToaMovementForecast, buildTravelResourceForecast } from "../utils/jungleTravelEngine.js";
+import { useCopyFeedback } from "../utils/useCopyFeedback.js";
 import { CommandModeSwitch, CommandTabs } from "./v2/CommandPrimitives.jsx";
 import { StatusPill, V2Panel } from "./v2/TabletopPrimitives.jsx";
 
@@ -55,11 +57,6 @@ function totalForRole(role) {
 
 function hasRoleRoll(role) {
   return role.roll !== "" && role.roll !== null && role.roll !== undefined;
-}
-
-function downloadTravelLog(travel, routeAnalysis) {
-  const payload = JSON.stringify({ exportedAt: new Date().toISOString(), routeAnalysis, travel }, null, 2);
-  navigator.clipboard?.writeText(payload);
 }
 
 function toneForOutcome(outcome) {
@@ -130,6 +127,7 @@ export function JungleTravel({
   onSeedInitiative,
   onNavigate,
 }) {
+  const { copyWithFeedback, isCopied } = useCopyFeedback();
   const [viewMode, setViewMode] = useState("run");
   const [eventTab, setEventTab] = useState("mechanics");
   const routeAnalysis = useMemo(() => buildChultRouteAnalysis(chultMap, travel), [chultMap, travel]);
@@ -184,6 +182,10 @@ export function JungleTravel({
     }
 
     if (eventTab === "prompt") {
+      const promptKey = `travel-map-prompt-${lastEvent.id || travel.day}`;
+      const promptCopied = isCopied(`${promptKey}-prompt`);
+      const jsonCopied = isCopied(`${promptKey}-json`);
+
       return (
         <div className="travel-map-prompt-card">
           <div>
@@ -192,18 +194,20 @@ export function JungleTravel({
           </div>
           <div className="travel-prompt-actions">
             <button
-              className="button button--ghost"
+              className={promptCopied ? "button button--ghost copy-confirm copy-confirm--active" : "button button--ghost copy-confirm"}
               type="button"
-              onClick={() => navigator.clipboard?.writeText(lastEvent.mapPrompt?.prompt || "")}
+              onClick={() => copyWithFeedback(lastEvent.mapPrompt?.prompt || "", `${promptKey}-prompt`)}
+              aria-live="polite"
             >
-              <Copy size={16} /> Kopieer prompt
+              {promptCopied ? <Check size={16} /> : <Copy size={16} />} {promptCopied ? "Gekopieerd" : "Kopieer prompt"}
             </button>
             <button
-              className="button button--ghost"
+              className={jsonCopied ? "button button--ghost copy-confirm copy-confirm--active" : "button button--ghost copy-confirm"}
               type="button"
-              onClick={() => navigator.clipboard?.writeText(formatMapPrompt(lastEvent.mapPrompt))}
+              onClick={() => copyWithFeedback(formatMapPrompt(lastEvent.mapPrompt), `${promptKey}-json`)}
+              aria-live="polite"
             >
-              <Copy size={16} /> Kopieer JSON
+              {jsonCopied ? <Check size={16} /> : <Copy size={16} />} {jsonCopied ? "Gekopieerd" : "Kopieer JSON"}
             </button>
           </div>
         </div>
@@ -277,8 +281,13 @@ export function JungleTravel({
           <button className="button button--ghost" type="button" onClick={() => onNavigate?.("chult-map")}>
             <MapPinned size={17} /> Chult Map
           </button>
-          <button className="button button--ghost" type="button" onClick={() => downloadTravelLog(travel, routeAnalysis)}>
-            <Download size={17} /> Export
+          <button
+            className={isCopied("travel-export-json") ? "button button--ghost copy-confirm copy-confirm--active" : "button button--ghost copy-confirm"}
+            type="button"
+            onClick={() => copyWithFeedback(JSON.stringify({ exportedAt: new Date().toISOString(), routeAnalysis, travel }, null, 2), "travel-export-json")}
+            aria-live="polite"
+          >
+            {isCopied("travel-export-json") ? <Check size={17} /> : <Download size={17} />} {isCopied("travel-export-json") ? "Gekopieerd" : "Export"}
           </button>
         </div>
       </header>

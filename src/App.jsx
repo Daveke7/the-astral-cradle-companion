@@ -14,6 +14,7 @@ import { LiveRuntime } from "./components/LiveRuntime.jsx";
 import { MagicItemSheet } from "./components/MagicItemSheet.jsx";
 import { MagicShopGenerator } from "./components/MagicShopGenerator.jsx";
 import { MemoryGraph } from "./components/MemoryGraph.jsx";
+import { MonsterCardForge } from "./components/MonsterCardForge.jsx";
 import { NpcManager } from "./components/NpcManager.jsx";
 import { PaletteLab } from "./components/PaletteLab.jsx";
 import { PartyPage } from "./components/PartyPage.jsx";
@@ -52,6 +53,7 @@ const modules = [
   { id: "magic-shop", label: "Magic Shop", modes: ["make", "play", "generators"] },
   { id: "treasure", label: "Treasure", modes: ["make", "play", "generators"] },
   { id: "random-encounter", label: "Encounter Gen", modes: ["play", "make", "generators"] },
+  { id: "monster-cards", label: "Monster Cards", modes: ["generators", "make", "play"] },
   { id: "npc-gen", label: "NPC Gen", modes: ["generators", "make"] },
   { id: "encounter", label: "Combat", modes: ["play"] },
   { id: "player", label: "Spelersscherm", modes: ["play", "players"] },
@@ -758,8 +760,11 @@ function App() {
     if (imports.sourceType === "beyond-url" && imports.url) {
       try {
         const fetched = await fetchDndBeyondCharacter(imports.url);
-        sourceText = JSON.stringify(fetched.payload, null, 2);
-        lastBeyondFetch = `${fetched.endpoint} @ ${new Date().toLocaleString("nl-NL")}`;
+        sourceText =
+          fetched.sourceKind === "json" && fetched.payload
+            ? JSON.stringify(fetched.payload, null, 2)
+            : fetched.sourceText || JSON.stringify(fetched.payload, null, 2);
+        lastBeyondFetch = `${fetched.endpointLabel || fetched.endpoint} @ ${new Date().toLocaleString("nl-NL")}`;
       } catch (error) {
         fetchError = error.message || "D&D Beyond kon niet automatisch worden opgehaald.";
       }
@@ -1164,6 +1169,7 @@ function App() {
     "magic-shop": <MagicShopGenerator />,
     treasure: <TreasureGenerator />,
     "random-encounter": <RandomEncounterGenerator onSeedInitiative={seedRandomEncounterToInitiative} />,
+    "monster-cards": <MonsterCardForge />,
     "npc-gen": <RandomNpcGenerator generatedNpcs={workspace.npcs?.generated || []} onSaveNpc={saveGeneratedNpc} />,
     npcs: <NpcManager generatedNpcs={workspace.npcs?.generated || []} />,
     quests: <QuestLog />,

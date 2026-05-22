@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
-import { Copy, LoaderCircle, Route, Search, ShieldAlert, Sparkles, Swords } from "lucide-react";
+import { Check, Copy, LoaderCircle, Route, Search, ShieldAlert, Sparkles, Swords } from "lucide-react";
 import { buildEnemySearchIndex } from "../utils/enemySearchIndex.js";
 import { fetchSrdMonsterDetail, fetchSrdMonsterIndex } from "../utils/monsterStatblocks.js";
 import { monsterImagePromptJson, monsterImagePromptSummary } from "../utils/monsterImagePrompts.js";
 import { copyRandomEncounter, generateRandomEncounter } from "../utils/randomEncounterGenerator.js";
 import { useCompendiumEntries } from "../utils/useCompendiumEntries.js";
+import { useCopyFeedback } from "../utils/useCopyFeedback.js";
 import { EmptyState, Panel, Tag } from "./ui.jsx";
 
 const difficulties = [
@@ -39,6 +40,7 @@ function difficultyTone(difficulty) {
 
 export function RandomEncounterGenerator({ onSeedInitiative }) {
   const compendiumMonsters = useCompendiumEntries("monsters");
+  const { copyWithFeedback, isCopied } = useCopyFeedback();
   const [partyLevel, setPartyLevel] = useState(4);
   const [pcs, setPcs] = useState(5);
   const [difficulty, setDifficulty] = useState("medium");
@@ -211,8 +213,13 @@ export function RandomEncounterGenerator({ onSeedInitiative }) {
                         <span>CR {entry.monster.cr} / {entry.monster.role} / {entry.monster.xp} XP</span>
                         <span>{monsterImagePromptSummary(entry.monster)}</span>
                       </div>
-                      <button className="button button--ghost" type="button" onClick={() => navigator.clipboard?.writeText(monsterImagePromptJson(entry.monster))}>
-                        <Copy size={15} /> JSON
+                      <button
+                        className={isCopied(`random-encounter-json-${entry.monster.index}`) ? "button button--ghost copy-confirm copy-confirm--active" : "button button--ghost copy-confirm"}
+                        type="button"
+                        onClick={() => copyWithFeedback(monsterImagePromptJson(entry.monster), `random-encounter-json-${entry.monster.index}`)}
+                        aria-live="polite"
+                      >
+                        {isCopied(`random-encounter-json-${entry.monster.index}`) ? <Check size={15} /> : <Copy size={15} />} {isCopied(`random-encounter-json-${entry.monster.index}`) ? "Gekopieerd" : "JSON"}
                       </button>
                       <Tag tone={entry.monster.source?.includes("Campaign") ? "warning" : "safe"}>{entry.monster.type || "monster"}</Tag>
                     </article>
